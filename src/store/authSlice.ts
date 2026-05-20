@@ -2,14 +2,14 @@ import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/tool
 import type { DepartmentId } from "../types/types";
 import { api, ApiError } from "../api/client";
 
-export type UserRole = "master" | "admin" | "user";
+export type UserRole = "master" | "admin" | "participant" | "requester";
 
 export interface AppUser {
   id: string;
   name: string;
   email?: string;
   role: UserRole;
-  departments: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
+  departments: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
 }
 
 const STORAGE_KEY = "mesa_auth_user";

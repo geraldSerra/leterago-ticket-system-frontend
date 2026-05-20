@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Plus, Pencil, Trash2, X, Crown, Shield, User, Settings,
+  Plus, Pencil, Trash2, X, Crown, Shield, Users, User, Settings,
 } from "lucide-react";
 import PageHeader from "../Molecules/PageHeader";
 import { useAppDispatch, useAppSelector, useCurrentUser } from "../../store/hooks";
@@ -15,10 +15,11 @@ import { DEPARTMENTS } from "../../config/catalog";
 import type { DepartmentId } from "../../types/types";
 import { getInitials } from "../../lib/initials";
 
-const ROLE_OPTIONS: { value: UserRole; label: string; icon: typeof Crown; bg: string }[] = [
-  { value: "master", label: "Master", icon: Crown,  bg: "bg-indigo-600" },
-  { value: "admin",  label: "Admin",  icon: Shield, bg: "bg-[#0047AC]" },
-  { value: "user",   label: "Usuario", icon: User, bg: "bg-slate-400" },
+const ROLE_OPTIONS: { value: UserRole; label: string; icon: typeof Crown; bg: string; description: string }[] = [
+  { value: "master",      label: "Máster",       icon: Crown,  bg: "bg-indigo-600",  description: "Acceso total + configuración" },
+  { value: "admin",       label: "Admin",         icon: Shield, bg: "bg-[#0047AC]",  description: "Asigna y confirma en sus dptos" },
+  { value: "participant", label: "Participante",  icon: Users,  bg: "bg-emerald-500", description: "Ve y resuelve tickets de su dpto" },
+  { value: "requester",   label: "Solicitante",   icon: User,   bg: "bg-slate-400",  description: "Crea y ve sus propios tickets" },
 ];
 
 const DEPARTMENT_LIST: DepartmentId[] = [
@@ -142,8 +143,10 @@ export default function ConfigPage() {
                             <span key={d.departmentId} className="inline-flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">
                               {DEPARTMENTS[d.departmentId as DepartmentId]?.label ?? d.departmentId}
                               {u.role !== "master" && (
-                                <span className={`text-[9px] font-bold px-1 rounded-sm ${d.role === "admin" ? "bg-[#0047AC] text-white" : "bg-slate-400 text-white"}`}>
-                                  {d.role === "admin" ? "A" : "U"}
+                                <span className={`text-[9px] font-bold px-1 rounded-sm text-white ${
+                                  d.role === "admin" ? "bg-[#0047AC]" : d.role === "participant" ? "bg-emerald-500" : "bg-slate-400"
+                                }`}>
+                                  {d.role === "admin" ? "A" : d.role === "participant" ? "P" : "S"}
                                 </span>
                               )}
                             </span>
@@ -231,7 +234,26 @@ export default function ConfigPage() {
 
 // ─── User form modal ──────────────────────────────────────────────────────────
 
-type DeptEntry = { departmentId: DepartmentId; role: "admin" | "user" };
+type DeptEntry = { departmentId: DepartmentId; role: "admin" | "participant" | "requester" };
+
+const DEPT_ROLE_OPTIONS: { value: DeptEntry["role"]; label: string; activeClass: string }[] = [
+  { value: "admin",       label: "Admin",        activeClass: "bg-[#0047AC] border-[#0047AC] text-white" },
+  { value: "participant", label: "Participante",  activeClass: "bg-emerald-500 border-emerald-500 text-white" },
+  { value: "requester",   label: "Solicitante",  activeClass: "bg-slate-500 border-slate-500 text-white" },
+];
+
+const ROLE_INFO: Record<UserRole, { label: string; description: string; Icon: typeof Crown; color: string }> = {
+  master:      { label: "Máster",       description: "Acceso total + configuración del sistema",           Icon: Crown,  color: "text-indigo-600" },
+  admin:       { label: "Admin",        description: "Asigna y confirma tickets en sus departamentos",     Icon: Shield, color: "text-[#0047AC]" },
+  participant: { label: "Participante", description: "Ve y resuelve tickets de sus departamentos",          Icon: Users,  color: "text-emerald-600" },
+  requester:   { label: "Solicitante",  description: "Crea y ve únicamente sus propios tickets",           Icon: User,   color: "text-slate-500" },
+};
+
+function deriveRole(depts: DeptEntry[]): UserRole {
+  if (depts.some((d) => d.role === "admin")) return "admin";
+  if (depts.some((d) => d.role === "participant")) return "participant";
+  return "requester";
+}
 
 function UserFormModal({
   mode,
@@ -255,27 +277,33 @@ function UserFormModal({
   const [name, setName] = useState(initial?.name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>(initial?.role ?? "user");
+  const [isMaster, setIsMaster] = useState(initial?.role === "master");
   const [departments, setDepartments] = useState<DeptEntry[]>(
-    initial?.departments ?? [],
+    (initial?.departments ?? []).map((d) => ({
+      ...d,
+      role: (d.role === "user" ? "participant" : d.role) as DeptEntry["role"],
+    })),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const derivedRole: UserRole = isMaster ? "master" : deriveRole(departments);
+  const roleInfo = ROLE_INFO[derivedRole];
 
   const isDeptChecked = (d: DepartmentId) =>
     departments.some((x) => x.departmentId === d);
 
-  const getDeptRole = (d: DepartmentId): "admin" | "user" =>
-    departments.find((x) => x.departmentId === d)?.role ?? "user";
+  const getDeptRole = (d: DepartmentId): DeptEntry["role"] =>
+    departments.find((x) => x.departmentId === d)?.role ?? "participant";
 
   const toggleDept = (d: DepartmentId) => {
     setDepartments((prev) =>
       isDeptChecked(d)
         ? prev.filter((x) => x.departmentId !== d)
-        : [...prev, { departmentId: d, role: "user" }],
+        : [...prev, { departmentId: d, role: "participant" }],
     );
   };
 
-  const setDeptRole = (d: DepartmentId, r: "admin" | "user") => {
+  const setDeptRole = (d: DepartmentId, r: DeptEntry["role"]) => {
     setDepartments((prev) =>
       prev.map((x) => (x.departmentId === d ? { ...x, role: r } : x)),
     );
@@ -303,7 +331,7 @@ function UserFormModal({
       name: name.trim(),
       email: email.trim(),
       password: password.length > 0 ? password : undefined,
-      role,
+      role: derivedRole,
       departments,
     });
   };
@@ -364,32 +392,45 @@ function UserFormModal({
             />
           </Field>
 
-          <Field label="Rol" hint={isSelf && role === "master" ? "No puedes quitarte el rol master a ti mismo" : undefined}>
-            <div className="grid grid-cols-3 gap-2">
-              {ROLE_OPTIONS.map((r) => {
-                const Icon = r.icon;
-                const isCurrent = role === r.value;
-                const wouldDemoteSelf = isSelf && initial?.role === "master" && r.value !== "master";
-                return (
-                  <button
-                    key={r.value}
-                    type="button"
-                    disabled={wouldDemoteSelf}
-                    onClick={() => setRole(r.value)}
-                    className={`flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-md border font-semibold transition-all ${
-                      isCurrent
-                        ? "bg-[#0047AC]/10 border-[#0047AC] text-[#0047AC]"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                    } ${wouldDemoteSelf ? "opacity-40 cursor-not-allowed" : ""}`}
-                  >
-                    <Icon size={13} />
-                    {r.label}
-                  </button>
-                );
-              })}
-            </div>
+          {/* ── Rol ── */}
+          <Field label="Rol" hint={isSelf && isMaster ? "No puedes quitarte el rol Máster a ti mismo" : undefined}>
+            {/* Master toggle */}
+            <button
+              type="button"
+              disabled={isSelf && initial?.role === "master"}
+              onClick={() => setIsMaster((v) => !v)}
+              className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-md border text-sm transition ${
+                isMaster
+                  ? "bg-indigo-50 border-indigo-400"
+                  : "border-gray-200 hover:border-gray-300"
+              } ${isSelf && initial?.role === "master" ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                isMaster ? "bg-indigo-600 border-indigo-600" : "border-gray-400"
+              }`}>
+                {isMaster && <div className="w-2 h-2 bg-white rounded-sm" />}
+              </div>
+              <Crown size={13} className={isMaster ? "text-indigo-600" : "text-gray-400"} />
+              <div className="flex flex-col items-start">
+                <span className={`text-xs font-semibold ${isMaster ? "text-indigo-600" : "text-gray-600"}`}>Máster</span>
+                <span className="text-[10px] text-gray-400 font-normal">Acceso total + configuración del sistema</span>
+              </div>
+            </button>
+
+            {/* Derived role display */}
+            {!isMaster && (
+              <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-md bg-gray-50 border border-gray-200">
+                <roleInfo.Icon size={15} className={roleInfo.color} />
+                <div className="flex flex-col">
+                  <span className={`text-xs font-semibold ${roleInfo.color}`}>{roleInfo.label}</span>
+                  <span className="text-[10px] text-gray-400 font-normal">{roleInfo.description}</span>
+                </div>
+                <span className="ml-auto text-[10px] text-gray-400 italic whitespace-nowrap">desde departamentos</span>
+              </div>
+            )}
           </Field>
 
+          {/* ── Departamentos ── */}
           <Field label="Departamentos">
             <div className="flex flex-col gap-2">
               {DEPARTMENT_LIST.map((d) => {
@@ -405,7 +446,7 @@ function UserFormModal({
                     <button
                       type="button"
                       onClick={() => toggleDept(d)}
-                      className="flex items-center gap-3 flex-1 text-left cursor-pointer"
+                      className="flex items-center gap-3 flex-1 text-left"
                     >
                       <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                         checked ? "bg-[#0047AC] border-[#0047AC]" : "border-gray-400"
@@ -418,28 +459,20 @@ function UserFormModal({
                     </button>
                     {checked && (
                       <div className="flex gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setDeptRole(d, "admin")}
-                          className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
-                            dRole === "admin"
-                              ? "bg-[#0047AC] border-[#0047AC] text-white"
-                              : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-                          }`}
-                        >
-                          Admin
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeptRole(d, "user")}
-                          className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
-                            dRole === "user"
-                              ? "bg-slate-500 border-slate-500 text-white"
-                              : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-                          }`}
-                        >
-                          Usuario
-                        </button>
+                        {DEPT_ROLE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setDeptRole(d, opt.value)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
+                              dRole === opt.value
+                                ? opt.activeClass
+                                : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>

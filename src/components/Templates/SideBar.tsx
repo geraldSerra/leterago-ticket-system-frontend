@@ -5,10 +5,10 @@ import logo from "../../assets/leterago-logo.png";
 import { useCurrentUser } from "../../store/hooks";
 
 const allTaps = [
-  { label: "Dashboard", path: "/", icon: <LayoutDashboard size={18} />, roles: ["master", "admin"] },
-  { label: "Tickets", path: "/tickets", icon: <Ticket size={18} />, roles: ["master", "admin", "user"] },
-  { label: "Nuevo Ticket", path: "/new-ticket", icon: <CirclePlus size={18} />, roles: ["master", "admin", "user"] },
-  { label: "Configuración", path: "/config", icon: <Settings size={18} />, roles: ["master"] },
+  { label: "Dashboard",     path: "/",          icon: <LayoutDashboard size={18} />, roles: ["master", "admin"] },
+  { label: "Tickets",       path: "/tickets",   icon: <Ticket size={18} />,          roles: ["master", "admin", "participant", "requester"] },
+  { label: "Nuevo Ticket",  path: "/new-ticket",icon: <CirclePlus size={18} />,      roles: ["master", "admin", "participant", "requester"] },
+  { label: "Configuración", path: "/config",    icon: <Settings size={18} />,        roles: ["master"] },
 ];
 
 const SideBar = () => {

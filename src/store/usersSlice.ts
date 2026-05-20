@@ -46,6 +46,18 @@ export const fetchUsers = createAsyncThunk<
   }
 });
 
+function formatApiError(e: unknown): string {
+  if (!(e instanceof ApiError)) return "Network error";
+  const details = e.details as { fieldErrors?: Record<string, string[]> } | undefined;
+  if (details?.fieldErrors) {
+    const fields = Object.entries(details.fieldErrors)
+      .map(([k, v]) => `${k}: ${v.join(", ")}`)
+      .join(" | ");
+    return `${e.message} — ${fields}`;
+  }
+  return e.message;
+}
+
 export const createUserAsync = createAsyncThunk<
   AppUser,
   CreateUserBody,
@@ -56,7 +68,7 @@ export const createUserAsync = createAsyncThunk<
     const u = await api.createUser(userId, body);
     return adapt(u);
   } catch (e) {
-    return rejectWithValue(e instanceof ApiError ? e.message : "Network error");
+    return rejectWithValue(formatApiError(e));
   }
 });
 
@@ -70,7 +82,7 @@ export const updateUserAsync = createAsyncThunk<
     const u = await api.updateUser(userId, id, changes);
     return adapt(u);
   } catch (e) {
-    return rejectWithValue(e instanceof ApiError ? e.message : "Network error");
+    return rejectWithValue(formatApiError(e));
   }
 });
 

@@ -11,13 +11,25 @@ const Tickets = () => {
   const { tickets } = useAppSelector((s) => s.tickets);
   const currentUser = useCurrentUser();
 
-  const userDeptIds: DepartmentId[] = currentUser.role === "master"
+  const workingDeptIds: DepartmentId[] = currentUser.role === "master"
     ? (Object.keys(DEPARTMENTS) as DepartmentId[])
-    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+    : currentUser.departments
+        .filter((d) => d.role !== "requester")
+        .map((d) => d.departmentId as DepartmentId);
 
-  const visible = currentUser.role === "user"
-    ? tickets.filter((t) => t.createdById === currentUser.id || t.assignedTo === currentUser.name)
-    : tickets.filter((t) => getCategoriesForDepartments(userDeptIds).includes(t.categoryId));
+  const visible =
+    currentUser.role === "master"
+      ? tickets
+      : currentUser.role === "requester"
+        ? tickets.filter((t) => t.createdById === currentUser.id)
+        : tickets.filter((t) => {
+            const cats = getCategoriesForDepartments(workingDeptIds);
+            return (
+              cats.includes(t.categoryId) ||
+              t.createdById === currentUser.id ||
+              t.assignedTo === currentUser.name
+            );
+          });
 
   const handleExport = () => {
     const headers = ["ID", "Título", "Departamento", "Categoría", "Prioridad", "Estado", "Asignado a", "Creado el"];

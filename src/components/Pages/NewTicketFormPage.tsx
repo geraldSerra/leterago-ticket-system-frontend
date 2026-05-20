@@ -54,11 +54,14 @@ export default function NewTicketFormPage() {
     });
   }, [currentUser, departmentId, categoryId]);
 
-  // Users available for assignment: everyone who has this department
+  // Users available for assignment: only admin/participant in this dept (not requesters)
   const assigneeUsers: AssigneeUser[] = useMemo(() => {
     if (!departmentId) return [];
     return allUsers
-      .filter((u) => u.departments.some((d) => d.departmentId === departmentId))
+      .filter((u) =>
+        u.role === "master" ||
+        u.departments.some((d) => d.departmentId === departmentId && d.role !== "requester")
+      )
       .map((u) => ({ id: u.id, name: u.name }));
   }, [allUsers, departmentId]);
 
@@ -123,14 +126,14 @@ export default function NewTicketFormPage() {
             {!userCanAssign && " Un administrador la asignará pronto."}
           </p>
           <div className="flex flex-col gap-3">
-            {(currentUser.role === "master" || currentUser.role === "admin") && (
-              <button
-                onClick={() => navigate("/tickets")}
-                className="w-full bg-[#0047AC] text-white py-2.5 rounded-md font-semibold text-sm hover:bg-blue-700 transition-colors"
-              >
-                Ver todos los tickets
-              </button>
-            )}
+            <button
+              onClick={() => navigate("/tickets")}
+              className="w-full bg-[#0047AC] text-white py-2.5 rounded-md font-semibold text-sm hover:bg-blue-700 transition-colors"
+            >
+              {currentUser.role === "master" || currentUser.role === "admin"
+                ? "Ver todos los tickets"
+                : "Ver mis tickets"}
+            </button>
             <button
               onClick={resetForm}
               className="w-full border border-gray-200 text-gray-600 py-2.5 rounded-md font-semibold text-sm hover:bg-gray-50 transition-colors"

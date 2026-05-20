@@ -1,18 +1,34 @@
-import { Bell, LogOut, Crown } from "lucide-react";
+import { Bell, LogOut, Crown, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useRef, useState, useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { logout } from "../../store/authSlice";
+import { logout, setCurrentUser } from "../../store/authSlice";
 import type { AppUser } from "../../store/authSlice";
 import { getInitials } from "../../lib/initials";
 
 const avatarBg: Record<string, string> = {
-  master: "bg-indigo-600",
-  admin:  "bg-[#0047AC]",
-  user:   "bg-slate-400",
+  master:      "bg-indigo-600",
+  admin:       "bg-[#0047AC]",
+  participant: "bg-emerald-500",
+  requester:   "bg-slate-400",
 };
 
-const Avatar = ({ user }: { user: AppUser }) => (
-  <div className={`w-8 h-8 ${avatarBg[user.role] ?? "bg-slate-400"} text-white rounded-full flex items-center justify-center font-bold text-xs shrink-0`}>
+const roleBadgeClass: Record<string, string> = {
+  master:      "bg-indigo-100 text-indigo-700",
+  admin:       "bg-blue-100 text-blue-700",
+  participant: "bg-emerald-100 text-emerald-700",
+  requester:   "bg-slate-100 text-slate-600",
+};
+
+const roleLabel: Record<string, string> = {
+  master:      "Máster",
+  admin:       "Admin",
+  participant: "Participante",
+  requester:   "Solicitante",
+};
+
+const Avatar = ({ user, size = 8 }: { user: AppUser; size?: number }) => (
+  <div className={`w-${size} h-${size} ${avatarBg[user.role] ?? "bg-slate-400"} text-white rounded-full flex items-center justify-center font-bold text-xs shrink-0`}>
     {getInitials(user.name)}
   </div>
 );
@@ -21,12 +37,31 @@ const NavBar = () => {
   const dispatch    = useAppDispatch();
   const navigate    = useNavigate();
   const currentUser = useAppSelector((s) => s.auth.currentUser);
+  const allUsers    = useAppSelector((s) => s.users.list);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isDev = import.meta.env.DEV;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   if (!currentUser) return null;
 
   const handleLogout = () => {
     dispatch(logout());
     navigate("/login", { replace: true });
+  };
+
+  const switchTo = (user: AppUser) => {
+    dispatch(setCurrentUser(user));
+    setOpen(false);
+    navigate("/", { replace: true });
   };
 
   return (
@@ -38,18 +73,81 @@ const NavBar = () => {
 
       <div className="w-px h-6 bg-gray-200" />
 
-      {/* Usuario actual — solo lectura */}
-      <div className="flex items-center gap-2.5 px-1 py-1.5">
-        <Avatar user={currentUser} />
-        <div className="text-left hidden sm:block">
-          <p className="text-sm font-semibold text-gray-800 leading-tight">{currentUser.name}</p>
-          {currentUser.role === "master" && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 bg-indigo-600 text-white">
-              <Crown size={11} />
-              Master
-            </span>
+      {/* Usuario actual */}
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => isDev && setOpen((v) => !v)}
+          className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors ${
+            isDev ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"
+          }`}
+        >
+          <Avatar user={currentUser} />
+          <div className="text-left hidden sm:block">
+            <p className="text-sm font-semibold text-gray-800 leading-tight">{currentUser.name}</p>
+            {currentUser.role === "master" && (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 bg-indigo-600 text-white">
+                <Crown size={11} />
+                Master
+              </span>
+            )}
+          </div>
+          {isDev && (
+            <ChevronDown
+              size={13}
+              className={`text-gray-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+            />
           )}
-        </div>
+        </button>
+
+        {isDev && open && (
+          <div className="absolute right-0 top-[calc(100%+6px)] z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-64 overflow-hidden">
+            {/* Header */}
+            <div className="px-3 py-2 bg-amber-50 border-b border-amber-100">
+              <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+                Dev · Cambiar usuario
+              </p>
+            </div>
+
+            {/* User list */}
+            <div className="max-h-80 overflow-y-auto">
+              {allUsers.length === 0 && (
+                <p className="text-xs text-gray-400 px-3 py-4 text-center">No hay usuarios cargados</p>
+              )}
+              {allUsers.map((u) => {
+                const isCurrent = u.id === currentUser.id;
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => !isCurrent && switchTo(u)}
+                    disabled={isCurrent}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                      isCurrent
+                        ? "bg-blue-50 cursor-default"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className={`w-8 h-8 ${avatarBg[u.role] ?? "bg-slate-400"} text-white rounded-full flex items-center justify-center text-[11px] font-bold shrink-0`}>
+                      {getInitials(u.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className={`text-xs font-semibold truncate ${isCurrent ? "text-[#0047AC]" : "text-gray-800"}`}>
+                          {u.name}
+                        </p>
+                        {isCurrent && (
+                          <span className="text-[9px] text-[#0047AC] font-medium shrink-0">• actual</span>
+                        )}
+                      </div>
+                      <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 ${roleBadgeClass[u.role] ?? "bg-gray-100 text-gray-600"}`}>
+                        {roleLabel[u.role] ?? u.role}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="w-px h-6 bg-gray-200" />

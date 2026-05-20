@@ -28,8 +28,8 @@ export type ServerUser = {
   id: string;
   name: string;
   email: string;
-  role: "master" | "admin" | "user";
-  departments: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
+  role: "master" | "admin" | "participant" | "requester";
+  departments: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
 };
 
 export type ServerTicket = {
@@ -135,16 +135,16 @@ export type CreateUserBody = {
   name: string;
   email: string;
   password: string;
-  role: "master" | "admin" | "user";
-  departments: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
+  role: "master" | "admin" | "participant" | "requester";
+  departments: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
 };
 
 export type UpdateUserBody = {
   name?: string;
   email?: string;
   password?: string;
-  role?: "master" | "admin" | "user";
-  departments?: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
+  role?: "master" | "admin" | "participant" | "requester";
+  departments?: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
 };
 
 export const api = {
@@ -180,7 +180,7 @@ export const api = {
   // Users
   listUsers: (
     userId: string,
-    query?: { role?: "master" | "admin" | "user"; departmentId?: DepartmentId },
+    query?: { role?: "master" | "admin" | "participant" | "requester"; departmentId?: DepartmentId },
   ) => request<ServerUser[]>(`/users${buildQuery(query)}`, userId),
 
   getUser: (userId: string, id: string) =>

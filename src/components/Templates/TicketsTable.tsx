@@ -15,18 +15,26 @@ function TicketsTable() {
   const currentUser = useCurrentUser();
   const navigate = useNavigate();
 
-  const userDeptIds: DepartmentId[] = currentUser.role === "master"
+  // Depts where this user actively works (admin/participant) — excludes requester-only depts
+  const workingDeptIds: DepartmentId[] = currentUser.role === "master"
     ? ALL_DEPT_IDS
-    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+    : currentUser.departments
+        .filter((d) => d.role !== "requester")
+        .map((d) => d.departmentId as DepartmentId);
 
   const visible: Ticket[] = useMemo(() => {
-    if (currentUser.role === "user") {
-      return tickets.filter(
-        (t) => t.createdById === currentUser.id || t.assignedTo === currentUser.name,
-      );
+    if (currentUser.role === "master") return tickets;
+    if (currentUser.role === "requester") {
+      return tickets.filter((t) => t.createdById === currentUser.id);
     }
-    const accessibleCats = getCategoriesForDepartments(userDeptIds);
-    return tickets.filter((t) => accessibleCats.includes(t.categoryId));
+    // participant/admin: working depts + own tickets + assigned tickets
+    const accessibleCats = getCategoriesForDepartments(workingDeptIds);
+    return tickets.filter(
+      (t) =>
+        accessibleCats.includes(t.categoryId) ||
+        t.createdById === currentUser.id ||
+        t.assignedTo === currentUser.name,
+    );
   }, [tickets, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [search, setSearch] = useState("");
@@ -53,7 +61,7 @@ function TicketsTable() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const showDeptFilter = userDeptIds.length > 1;
+  const showDeptFilter = workingDeptIds.length > 1;
 
   return (
     <div className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden ">
@@ -72,7 +80,7 @@ function TicketsTable() {
         {showDeptFilter && (
           <FilterSelect value={deptFilter} onChange={(v) => { setDeptFilter(v); setPage(1); }} label="Área">
             <option value="all">Todos los departamentos</option>
-            {userDeptIds.map((dId) => (
+            {workingDeptIds.map((dId) => (
               <option key={dId} value={dId}>{DEPARTMENTS[dId].label}</option>
             ))}
           </FilterSelect>

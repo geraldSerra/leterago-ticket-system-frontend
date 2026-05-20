@@ -13,9 +13,13 @@ export default function CreateTicketPage() {
   const currentUser = useCurrentUser();
   const [deptFilter, setDeptFilter] = useState<DepartmentId | "all">("all");
 
-  const userDeptIds: DepartmentId[] = currentUser.role === "master"
-    ? ALL_DEPT_IDS
-    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+  // Requesters can create tickets in any department; others are scoped to their working depts
+  const userDeptIds: DepartmentId[] =
+    currentUser.role === "master" || currentUser.role === "requester"
+      ? ALL_DEPT_IDS
+      : currentUser.departments
+          .filter((d) => d.role !== "requester")
+          .map((d) => d.departmentId as DepartmentId);
 
   // Accessible categories based on user's departments
   const accessibleCategories = useMemo(
