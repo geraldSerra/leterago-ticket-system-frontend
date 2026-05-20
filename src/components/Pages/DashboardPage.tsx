@@ -5,6 +5,8 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import type { Ticket, DepartmentId } from "../../types/types";
 import { DEPARTMENTS, getCategoriesForDepartments } from "../../config/catalog";
 
+const ALL_DEPT_IDS: DepartmentId[] = ["compras", "servicios-generales", "mantenimiento-seguridad"];
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function toYMD(d: Date): string {
   return d.toISOString().split("T")[0];
@@ -121,7 +123,7 @@ function DateRangePicker({
       {/* Trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 border border-gray-200 px-3 py-2 rounded-xl text-sm text-gray-600 bg-white hover:border-[#0047AC]/40 transition-colors font-medium"
+        className="flex items-center gap-2 border border-gray-200 px-3 py-2 rounded-md text-sm text-gray-600 bg-white hover:border-[#0047AC]/40 transition-colors font-medium"
       >
         <CalendarDays className="w-4 h-4 text-[#0047AC]" />
         <span>{label}</span>
@@ -138,7 +140,7 @@ function DateRangePicker({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-[calc(100%+8px)] z-50 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden w-80">
+        <div className="absolute left-0 top-[calc(100%+8px)] z-50 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden w-80">
           {/* Quick shortcuts */}
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Acceso rápido</p>
@@ -149,7 +151,7 @@ function DateRangePicker({
                   <button
                     key={s.label}
                     onClick={() => { onChange({ from: s.from, to: s.to }); setOpen(false); }}
-                    className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all
+                    className={`text-xs px-2.5 py-1 rounded border font-semibold transition-all
                       ${active
                         ? "bg-[#0047AC] text-white border-[#0047AC]"
                         : "bg-gray-50 text-gray-600 border-gray-200 hover:border-[#0047AC] hover:text-[#0047AC]"
@@ -168,7 +170,7 @@ function DateRangePicker({
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setViewDate((d) => addMonths(d, -1))}
-                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
               >
                 <ChevronDown size={14} className="rotate-90" />
               </button>
@@ -177,7 +179,7 @@ function DateRangePicker({
               </span>
               <button
                 onClick={() => setViewDate((d) => addMonths(d, 1))}
-                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
               >
                 <ChevronDown size={14} className="-rotate-90" />
               </button>
@@ -205,12 +207,12 @@ function DateRangePicker({
                     onMouseLeave={() => setHovered(null)}
                     className={`relative text-xs h-7 w-full font-medium transition-all
                       ${edge === "from" || edge === "to"
-                        ? "bg-[#0047AC] text-white rounded-lg z-10"
+                        ? "bg-[#0047AC] text-white rounded z-10"
                         : inRange
                           ? "bg-blue-50 text-[#0047AC]"
-                          : "text-gray-700 hover:bg-gray-100 rounded-lg"
+                          : "text-gray-700 hover:bg-gray-100 rounded"
                       }
-                      ${isToday && !edge ? "ring-1 ring-[#0047AC]/40 rounded-lg" : ""}
+                      ${isToday && !edge ? "ring-1 ring-[#0047AC]/40 rounded" : ""}
                     `}
                   >
                     {day.split("-")[2].replace(/^0/, "")}
@@ -271,7 +273,7 @@ function DeptMultiFilter({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 border border-gray-200 px-3 py-2 rounded-xl text-sm text-gray-600 bg-white hover:border-[#0047AC]/40 transition-colors font-medium"
+        className="flex items-center gap-2 border border-gray-200 px-3 py-2 rounded-md text-sm text-gray-600 bg-white hover:border-[#0047AC]/40 transition-colors font-medium"
       >
         <span>{label}</span>
         {!allSelected && (
@@ -283,7 +285,7 @@ function DeptMultiFilter({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+8px)] z-50 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden min-w-56">
+        <div className="absolute left-0 top-[calc(100%+8px)] z-50 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden min-w-56">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Departamentos</p>
           </div>
@@ -291,7 +293,7 @@ function DeptMultiFilter({
             {/* Select all */}
             <button
               onClick={() => onChange([...available])}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-colors
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors
                 ${allSelected ? "bg-blue-50 text-[#0047AC] font-semibold" : "hover:bg-gray-50 text-gray-600"}`}
             >
               <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0
@@ -307,7 +309,7 @@ function DeptMultiFilter({
                 <button
                   key={dId}
                   onClick={() => toggle(dId)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-colors
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors
                     ${checked ? "bg-blue-50 text-[#0047AC] font-semibold" : "hover:bg-gray-50 text-gray-600"}`}
                 >
                   <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0
@@ -331,8 +333,12 @@ export default function DashboardPage() {
   const currentUser = useCurrentUser();
 
   // Department filter — only shown if user has 2+ departments
-  const [selectedDepts, setSelectedDepts] = useState<DepartmentId[]>([...currentUser.departments]);
-  const showDeptFilter = currentUser.departments.length > 1;
+  const userDeptIds: DepartmentId[] = currentUser.role === "master"
+    ? ALL_DEPT_IDS
+    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+
+  const [selectedDepts, setSelectedDepts] = useState<DepartmentId[]>(userDeptIds);
+  const showDeptFilter = userDeptIds.length > 1;
 
   // Date range filter
   const [dateRange, setDateRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
@@ -348,9 +354,8 @@ export default function DashboardPage() {
     });
   }, [tickets, selectedDepts, dateRange]);
 
-  // Re-sync dept filter when user switches profile
-  const depts = currentUser.departments;
-  useMemo(() => { setSelectedDepts([...depts]); }, [depts]);
+  // Re-sync dept filter when user changes
+  useEffect(() => { setSelectedDepts(userDeptIds); }, [currentUser.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total          = visible.length;
   const completed      = visible.filter((t) => t.status === "confirmed").length;
@@ -377,7 +382,7 @@ export default function DashboardPage() {
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <div className="w-full min-h-screen p-6 max-w-7xl mx-auto">
+    <div className="w-full min-h-screen p-6 max-w-screen-2xl mx-auto">
       <div className="mb-6">
         <PageHeader
           indicator="Dashboard"
@@ -393,7 +398,7 @@ export default function DashboardPage() {
           {/* Dept multi-filter — only for multi-dept users */}
           {showDeptFilter && (
             <DeptMultiFilter
-              available={currentUser.departments}
+              available={userDeptIds}
               selected={selectedDepts}
               onChange={setSelectedDepts}
             />
@@ -401,7 +406,7 @@ export default function DashboardPage() {
 
           {/* Active filter chips */}
           {(dateRange.from || dateRange.to) && (
-            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-xl px-2.5 py-1.5 text-xs text-[#0047AC] font-semibold">
+            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-md px-2.5 py-1.5 text-xs text-[#0047AC] font-semibold">
               <CalendarDays size={12} />
               {dateRange.from && dateRange.to
                 ? `${dateRange.from} → ${dateRange.to}`
@@ -430,7 +435,7 @@ export default function DashboardPage() {
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         {/* Completion donut */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-lg p-5 ">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Tasa de Completación</p>
           <div className="flex items-center justify-center py-4">
             <div className="relative w-28 h-28">
@@ -455,7 +460,7 @@ export default function DashboardPage() {
         </div>
 
         {/* By Department */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-lg p-5 ">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Por Departamento</p>
           <div className="flex flex-col gap-3">
             {byDept.length === 0 && <p className="text-sm text-gray-400">Sin datos en el período</p>}
@@ -477,14 +482,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Speed card */}
-        <div className="flex flex-col gap-3 bg-gradient-to-br from-[#0047AC] to-blue-800 rounded-2xl px-5 py-6 shadow-sm">
+        <div className="flex flex-col gap-3 bg-gradient-to-br from-[#0047AC] to-blue-800 rounded-lg px-5 py-6 ">
           <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider">Velocidad de Resolución</p>
           <div className="flex justify-between items-center">
             <div className="flex flex-col gap-2">
               <h2 className="text-white text-4xl font-bold">
                 1.4 <span className="text-sm text-blue-200 font-normal">horas</span>
               </h2>
-              <span className="text-xs bg-blue-200/25 text-blue-100 px-2 py-1 rounded-lg w-fit">
+              <span className="text-xs bg-blue-200/25 text-blue-100 px-2 py-1 rounded w-fit">
                 -15% vs mes anterior
               </span>
             </div>
@@ -504,7 +509,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Priority breakdown */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-lg p-5 ">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Desglose por Prioridad</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <PriorityBar label="Urgente" count={byPriority.urgent} total={total} color="bg-red-500"     textColor="text-red-600" />
@@ -523,10 +528,10 @@ function StatCard({ title, value, icon, bg }: {
   title: string; value: string; icon: React.ReactNode; bg: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-lg p-5 ">
       <div className="flex justify-between items-start mb-3">
         <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">{title}</p>
-        <div className={`${bg} p-2 rounded-xl`}>{icon}</div>
+        <div className={`${bg} p-2 rounded-md`}>{icon}</div>
       </div>
       <h3 className="text-4xl font-bold text-gray-900">{value}</h3>
     </div>

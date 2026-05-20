@@ -17,7 +17,7 @@ export default function StatsCard({
   trendType = "success",
 }: StatsCardProps) {
   return (
-    <div className="bg-gray-100 border border-blue-900/40 rounded-xl p-5 text-white">
+    <div className="bg-gray-100 border border-blue-900/40 rounded-md p-5 text-white">
       <div className="flex justify-between items-start mb-4">
         <div className="bg-blue-500/10 p-2 rounded-md">{icon}</div>
 

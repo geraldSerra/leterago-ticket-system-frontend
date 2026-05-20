@@ -14,12 +14,13 @@ import type { DepartmentId } from "../types/types";
 import type { RootState } from "./store";
 import type { AppUser } from "./authSlice";
 
-const BOOTSTRAP_USER_ID = "master";
+const BOOTSTRAP_USER_ID = "100001";
 
 function adapt(u: ServerUser): AppUser {
   return {
     id: u.id,
     name: u.name,
+    email: u.email,
     role: u.role,
     departments: u.departments,
   };
@@ -162,5 +163,5 @@ export const selectUserByName = (name: string) =>
 
 export const selectUsersByDepartment = (departmentId: DepartmentId) =>
   createSelector(selectUsers, (users) =>
-    users.filter((u) => u.departments.includes(departmentId)),
+    users.filter((u) => u.departments.some((d) => d.departmentId === departmentId)),
   );

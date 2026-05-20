@@ -19,15 +19,14 @@ function adaptServerTicket(t: ServerTicket): Ticket {
     id: t.id,
     title: t.title,
     description: t.description ?? undefined,
-    note: t.note ?? undefined,
     departmentId: t.departmentId,
     categoryId: t.categoryId,
     status: t.status,
     priority: t.priority,
+    createdById: t.createdById,
     createdBy: t.createdBy?.name ?? t.createdById,
     assignedTo: t.assignedTo?.name ?? undefined,
-    executionDate: t.executionDate ?? undefined,
-    executionTime: t.executionTime ?? undefined,
+    executionAt: t.executionAt ?? undefined,
     payload: t.payload ?? undefined,
     payloadVersion: t.payloadVersion,
     createdAt: t.createdAt,
@@ -77,13 +76,10 @@ export const createTicketAsync = createAsyncThunk<
   {
     title: string;
     description: string;
-    note?: string;
     departmentId: DepartmentId;
     categoryId: CategoryId;
     priority: TicketPriority;
     assignedToId?: string;
-    executionDate?: string;
-    executionTime?: string;
     payload?: unknown;
   },
   { state: RootState; rejectValue: string }
@@ -93,13 +89,10 @@ export const createTicketAsync = createAsyncThunk<
     const server = await api.createTicket(userId, {
       title: input.title,
       description: input.description || undefined,
-      note: input.note || undefined,
       departmentId: input.departmentId,
       categoryId: input.categoryId,
       priority: input.priority,
       assignedToId: input.assignedToId || undefined,
-      executionDate: input.executionDate || undefined,
-      executionTime: input.executionTime || undefined,
       payload: input.payload,
     });
     return adaptServerTicket(server);
@@ -111,12 +104,10 @@ export const createTicketAsync = createAsyncThunk<
 export type UpdateTicketChanges = {
   title?: string;
   description?: string;
-  note?: string;
   status?: TicketStatus;
   priority?: TicketPriority;
   assignedToId?: string | null;
-  executionDate?: string | null;
-  executionTime?: string | null;
+  executionAt?: string | null;
   payload?: unknown;
 };
 
@@ -130,12 +121,10 @@ export const updateTicketAsync = createAsyncThunk<
     const body: UpdateTicketBody = {};
     if (changes.title !== undefined) body.title = changes.title;
     if (changes.description !== undefined) body.description = changes.description;
-    if (changes.note !== undefined) body.note = changes.note;
     if (changes.status !== undefined) body.status = changes.status;
     if (changes.priority !== undefined) body.priority = changes.priority;
     if (changes.assignedToId !== undefined) body.assignedToId = changes.assignedToId;
-    if (changes.executionDate !== undefined) body.executionDate = changes.executionDate;
-    if (changes.executionTime !== undefined) body.executionTime = changes.executionTime;
+    if (changes.executionAt !== undefined) body.executionAt = changes.executionAt;
     if (changes.payload !== undefined) body.payload = changes.payload;
 
     const server = await api.updateTicket(userId, id, body);
@@ -199,7 +188,13 @@ const ticketsSlice = createSlice({
       })
       .addCase(fetchTickets.fulfilled, (state, action) => {
         state.status = "ready";
-        state.tickets = action.payload;
+        state.tickets = action.payload.map((t) => {
+          const prev = state.tickets.find((p) => p.id === t.id);
+          if (prev?.payload != null) {
+            return { ...t, payload: prev.payload, payloadVersion: prev.payloadVersion };
+          }
+          return t;
+        });
       })
       .addCase(fetchTickets.rejected, (state, action) => {
         state.status = "error";

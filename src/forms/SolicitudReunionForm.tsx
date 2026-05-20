@@ -4,38 +4,45 @@ import type { CategoryFormProps } from "./types";
 export type SolicitudReunionPayload = {
   salon: string;
   cantidadParticipantes: number;
-  tipoMontaje: "" | "auditorio" | "u" | "mesa-redonda" | "escuela";
+  tipoMontaje: "" | "teatro" | "escuela" | "u-con-mesas" | "otros";
+  otrosMontaje: string;
   duracion: number;
   fecha: string;
-  hora: string;
+  horaDesde: string;
+  horaHasta: string;
   refrigerios: string[];
-  soporte: string[];
 };
 
 export const defaultValue: SolicitudReunionPayload = {
   salon: "",
   cantidadParticipantes: 0,
   tipoMontaje: "",
+  otrosMontaje: "",
   duracion: 0,
   fecha: "",
-  hora: "",
+  horaDesde: "",
+  horaHasta: "",
   refrigerios: [],
-  soporte: [],
+};
+
+const formatTime12 = (t: string) => {
+  if (!t) return "—";
+  const [hStr, mStr] = t.split(":");
+  const h = parseInt(hStr, 10);
+  if (isNaN(h)) return t;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${mStr} ${suffix}`;
 };
 
 const cateringOptions = [
-  "Cafetería Continua",
-  "Estación de Agua/Fruta",
-  "Almuerzo Corporativo",
-  "Snacks Media Mañana",
+  "Estación de Agua & Café",
+  "Desayuno",
+  "Picadera variada",
+  "Almuerzo",
+  "Cena",
 ];
 
-const supportOptions = [
-  "Fotografias",
-  "Cotizaciones",
-  "Documentos de soporte",
-  "Otros",
-];
 
 export default function SolicitudReunionForm({
   value,
@@ -50,17 +57,17 @@ export default function SolicitudReunionForm({
     onChange({ ...value, [key]: v });
   };
 
-  const toggleArr = (key: "refrigerios" | "soporte", v: string) => {
+  const toggleRefrigerio = (v: string) => {
     if (readOnly) return;
-    const arr = value[key];
-    set(key, arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+    const arr = value.refrigerios;
+    set("refrigerios", arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   };
 
   const inputBase =
     "w-full border border-gray-200 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-700 disabled:cursor-default";
 
   return (
-    <div className="flex flex-col gap-4 border border-gray-200 p-6 text-gray-700 rounded-xl bg-white shadow-sm">
+    <div className="flex flex-col gap-4 border border-gray-200 p-6 text-gray-700 rounded-xl bg-white">
       <div className="flex flex-col w-full">
         <h2 className="text-sm font-semibold mb-6">Detalles de la Reunión</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -73,8 +80,10 @@ export default function SolicitudReunionForm({
               className={inputBase}
             >
               <option value="">Seleccione Salón</option>
-              <option value="Sala A">Sala A</option>
-              <option value="Sala B">Sala B</option>
+              <option value="Salón Rodolfo Wehe">Salón Rodolfo Wehe</option>
+              <option value="Salón Area de Finanza">Salón Area de Finanza</option>
+              <option value="Salón Servicio al Cliente">Salón Servicio al Cliente</option>
+              <option value="Salón P&C">Salón P&amp;C</option>
             </select>
           </div>
 
@@ -94,22 +103,36 @@ export default function SolicitudReunionForm({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Tipo de Montaje</label>
-            <select
-              disabled={readOnly}
-              value={value.tipoMontaje}
-              onChange={(e) =>
-                set("tipoMontaje", e.target.value as SolicitudReunionPayload["tipoMontaje"])
-              }
-              className={inputBase}
-            >
-              <option value="">Seleccione Estilo</option>
-              <option value="auditorio">Auditorio</option>
-              <option value="u">U</option>
-              <option value="mesa-redonda">Mesa Redonda</option>
-              <option value="escuela">Escuela</option>
-            </select>
+          <div className="flex flex-col gap-2">
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Tipo de Montaje</label>
+              <select
+                disabled={readOnly}
+                value={value.tipoMontaje}
+                onChange={(e) => {
+                  if (readOnly) return;
+                  const m = e.target.value as SolicitudReunionPayload["tipoMontaje"];
+                  onChange({ ...value, tipoMontaje: m, otrosMontaje: m !== "otros" ? "" : (value.otrosMontaje ?? "") });
+                }}
+                className={inputBase}
+              >
+                <option value="">Seleccione Estilo</option>
+                <option value="teatro">Teatro</option>
+                <option value="escuela">Escuela</option>
+                <option value="u-con-mesas">Forma de "U" con Mesas</option>
+                <option value="otros">Otros (Especificar)</option>
+              </select>
+            </div>
+            {value.tipoMontaje === "otros" && (
+              <input
+                type="text"
+                disabled={readOnly}
+                value={value.otrosMontaje ?? ""}
+                onChange={(e) => set("otrosMontaje", e.target.value)}
+                placeholder="Especifique el tipo de montaje..."
+                className={inputBase}
+              />
+            )}
           </div>
 
           <div>
@@ -130,42 +153,56 @@ export default function SolicitudReunionForm({
           </div>
 
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Fecha</label>
-            <input
-              type="date"
-              disabled={readOnly}
-              value={value.fecha}
-              onChange={(e) => set("fecha", e.target.value)}
-              className={inputBase}
-            />
+            <label className="text-xs text-gray-400 block mb-1">Fecha actividad</label>
+            {readOnly ? (
+              <div className={inputBase + " bg-gray-50 text-gray-700"}>
+                {value.fecha ? value.fecha.split("-").reverse().join("/") : "—"}
+              </div>
+            ) : (
+              <input
+                type="date"
+                value={value.fecha}
+                onChange={(e) => set("fecha", e.target.value)}
+                className={inputBase}
+              />
+            )}
           </div>
 
           <div>
             <label className="text-xs text-gray-400 block mb-1">Hora</label>
-            <input
-              type="time"
-              disabled={readOnly}
-              value={value.hora}
-              onChange={(e) => set("hora", e.target.value)}
-              className={inputBase}
-            />
+            {readOnly ? (
+              <div className="flex items-center gap-2">
+                <div className={inputBase + " bg-gray-50 text-gray-700"}>{formatTime12(value.horaDesde)}</div>
+                <span className="text-xs text-gray-400 shrink-0">hasta</span>
+                <div className={inputBase + " bg-gray-50 text-gray-700"}>{formatTime12(value.horaHasta)}</div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="time"
+                  value={value.horaDesde}
+                  onChange={(e) => set("horaDesde", e.target.value)}
+                  className={inputBase}
+                />
+                <span className="text-xs text-gray-400 shrink-0">hasta</span>
+                <input
+                  type="time"
+                  value={value.horaHasta}
+                  onChange={(e) => set("horaHasta", e.target.value)}
+                  className={inputBase}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4">
+      <div className="flex flex-col gap-4">
         <Toggles
           title="Refrigerios"
           options={cateringOptions}
           selected={value.refrigerios}
-          onToggle={(v) => toggleArr("refrigerios", v)}
-          readOnly={readOnly}
-        />
-        <Toggles
-          title="Evidencia / Soporte adjunto"
-          options={supportOptions}
-          selected={value.soporte}
-          onToggle={(v) => toggleArr("soporte", v)}
+          onToggle={toggleRefrigerio}
           readOnly={readOnly}
         />
       </div>

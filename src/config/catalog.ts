@@ -15,7 +15,7 @@ export interface CategoryDef {
 export const CATEGORIES: Record<CategoryId, CategoryDef> = {
   "solicitud-reunion": {
     id: "solicitud-reunion",
-    label: "Solicitud de Reunión",
+    label: "Reserva Salones",
     description: "Reserva de salas, coordinación de agendas y equipos audiovisuales o catering.",
     icon: CalendarDays,
     iconColor: "text-[#0047AC]",
@@ -39,8 +39,8 @@ export const CATEGORIES: Record<CategoryId, CategoryDef> = {
   },
   "solicitud-bancos": {
     id: "solicitud-bancos",
-    label: "Solicitud Bancos",
-    description: "Gestiones bancarias, transferencias, pagos y trámites financieros.",
+    label: "Mensajería",
+    description: "Servicios destinados al transporte, entrega, recepción, gestión de documentos y/o bancarios, paquetes y diligencias corporativas.",
     icon: Landmark,
     iconColor: "text-purple-600",
     iconBg: "bg-purple-50",

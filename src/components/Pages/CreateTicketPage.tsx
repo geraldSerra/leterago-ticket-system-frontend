@@ -6,15 +6,21 @@ import { useCurrentUser } from "../../store/hooks";
 import { CATEGORIES, DEPARTMENTS, getCategoriesForDepartments } from "../../config/catalog";
 import type { DepartmentId } from "../../types/types";
 
+const ALL_DEPT_IDS = Object.keys(DEPARTMENTS) as DepartmentId[];
+
 export default function CreateTicketPage() {
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const [deptFilter, setDeptFilter] = useState<DepartmentId | "all">("all");
 
+  const userDeptIds: DepartmentId[] = currentUser.role === "master"
+    ? ALL_DEPT_IDS
+    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+
   // Accessible categories based on user's departments
   const accessibleCategories = useMemo(
-    () => getCategoriesForDepartments(currentUser.departments),
-    [currentUser.departments]
+    () => getCategoriesForDepartments(userDeptIds),
+    [currentUser.id, currentUser.departments] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Apply optional department filter
@@ -26,10 +32,10 @@ export default function CreateTicketPage() {
   }, [accessibleCategories, deptFilter]);
 
   // Only show dept filter selector if user has access to 2+ departments
-  const showDeptFilter = currentUser.departments.length > 1;
+  const showDeptFilter = userDeptIds.length > 1;
 
   return (
-    <div className="flex flex-col w-full min-h-screen p-6 max-w-5xl mx-auto">
+    <div className="flex flex-col w-full min-h-screen p-6 max-w-7xl mx-auto">
       <PageHeader
         indicator="Nuevo Ticket"
         title="Crear Solicitud"
@@ -49,7 +55,7 @@ export default function CreateTicketPage() {
               onClick={() => setDeptFilter("all")}
               label="Todos"
             />
-            {currentUser.departments.map((dId) => (
+            {userDeptIds.map((dId) => (
               <FilterPill
                 key={dId}
                 active={deptFilter === dId}
@@ -74,7 +80,7 @@ export default function CreateTicketPage() {
             <button
               key={catId}
               onClick={() => navigate(`/create-ticket?category=${catId}`)}
-              className="group text-left bg-white border border-gray-200 rounded-2xl p-6 hover:border-[#0047AC] hover:shadow-md transition-all duration-200 cursor-pointer"
+              className="group text-left bg-white border border-gray-200 rounded-lg p-6 hover:border-[#0047AC]  transition-all duration-200 cursor-pointer"
             >
               {/* Department tag */}
               {dept && (
@@ -82,7 +88,7 @@ export default function CreateTicketPage() {
                   {dept.label}
                 </span>
               )}
-              <div className={`w-12 h-12 ${cat.iconBg} rounded-xl flex items-center justify-center mb-3`}>
+              <div className={`w-12 h-12 ${cat.iconBg} rounded-md flex items-center justify-center mb-3`}>
                 <Icon className={`w-6 h-6 ${cat.iconColor}`} />
               </div>
               <h3 className="text-base font-bold text-gray-900 mb-1.5 group-hover:text-[#0047AC] transition-colors">
@@ -105,7 +111,7 @@ function FilterPill({ active, onClick, label }: { active: boolean; onClick: () =
   return (
     <button
       onClick={onClick}
-      className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+      className={`text-xs font-semibold px-3 py-1.5 rounded-md border transition-all ${
         active
           ? "bg-[#0047AC] text-white border-[#0047AC]"
           : "bg-white text-gray-600 border-gray-200 hover:border-[#0047AC] hover:text-[#0047AC]"

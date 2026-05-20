@@ -7,7 +7,7 @@ import {
   TrendingUp,
   Clock,
   CircleDashed,
-  LaptopMinimalCheck,
+  BadgeCheck,
 } from "lucide-react";
 
 interface BadgeProps {
@@ -26,21 +26,20 @@ interface BadgeProps {
 
 const Badge = ({ variant }: Readonly<BadgeProps>) => {
   const styles = {
-    urgent: "px-2 py-1 w-fit bg-red-50 text-red-500 border-red-300 rounded-sm",
-    high: "px-2 py-1 w-fit bg-yellow-50 text-yellow-500 border-yellow-300 rounded-sm",
-    medium:
-      "px-2 py-1 w-fit bg-green-50 text-green-500 border-green-300 rounded-sm",
-    low: "px-2 py-1 w-fit bg-gray-50 text-gray-500 border-gray-300 rounded-sm",
+    urgent: "px-2 py-1 bg-white text-[#ef4444] border-gray-200 rounded-md font-normal",
+    high: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
+    medium: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
+    low: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
     pending:
-      "px-3 py-1 w-fit bg-gray-50 text-gray-500 border-[#0047AC]/15 rounded-full",
+      "px-3 py-1 bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 rounded-full",
     in_progress:
-      "px-3 py-1 w-fit bg-[#0047AC]/10 text-[#0047AC] border-[#0047AC]/20 rounded-full",
+      "px-3 py-1 bg-[#0047AC]/10 text-[#0047AC] border-[#0047AC]/20 rounded-full",
     completed:
-      "px-3 py-1 w-fit text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20 rounded-full",
+      "px-3 py-1 text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20 rounded-full",
     confirmed:
-      "px-3 py-1 w-fit text-black bg-gray-50 border-gray-600 rounded-full",
+      "px-3 py-1 text-white bg-[#10B981] border-[#10B981] rounded-full",
     canceled:
-      "px-3 py-1 w-fit text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/20 rounded-full",
+      "px-3 py-1 text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/20 rounded-full",
   };
 
   const texts = {
@@ -56,20 +55,20 @@ const Badge = ({ variant }: Readonly<BadgeProps>) => {
   };
 
   const icons = {
-    urgent: <TriangleAlert size={14} />,
-    high: <TrendingUp size={14} />,
-    medium: <Minus size={14} />,
-    low: <TrendingDown size={14} />,
+    urgent: <TriangleAlert size={14} className="text-[#ef4444]" />,
+    high: null,
+    medium: null,
+    low: null,
     pending: <Clock size={14} />,
     in_progress: <CircleDashed size={14} />,
     completed: <CircleCheckBig size={14} />,
-    confirmed: <LaptopMinimalCheck size={14} />,
+    confirmed: <BadgeCheck size={14} />,
     canceled: <CircleX size={14} />,
   };
 
   return (
     <div
-      className={`flex justify-center items-center gap-1 text-[12px] font-semibold border ${styles[variant]}`}
+      className={`flex justify-center items-center gap-1 text-[12px] border w-28 h-7 ${styles[variant]}`}
     >
       {icons[variant]} {texts[variant]}
     </div>

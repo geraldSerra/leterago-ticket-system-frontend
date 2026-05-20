@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Plus, Pencil, Trash2, X, Crown, Shield, User,
+  Plus, Pencil, Trash2, X, Crown, Shield, User, Settings,
 } from "lucide-react";
 import PageHeader from "../Molecules/PageHeader";
 import { useAppDispatch, useAppSelector, useCurrentUser } from "../../store/hooks";
@@ -18,7 +18,7 @@ import { getInitials } from "../../lib/initials";
 const ROLE_OPTIONS: { value: UserRole; label: string; icon: typeof Crown; bg: string }[] = [
   { value: "master", label: "Master", icon: Crown,  bg: "bg-indigo-600" },
   { value: "admin",  label: "Admin",  icon: Shield, bg: "bg-[#0047AC]" },
-  { value: "user",   label: "Invitado", icon: User, bg: "bg-slate-400" },
+  { value: "user",   label: "Usuario", icon: User, bg: "bg-slate-400" },
 ];
 
 const DEPARTMENT_LIST: DepartmentId[] = [
@@ -35,6 +35,7 @@ export default function ConfigPage() {
 
   const [editing, setEditing] = useState<AppUser | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AppUser | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -42,13 +43,19 @@ export default function ConfigPage() {
     };
   }, [dispatch]);
 
+  useEffect(() => {
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleDelete = async (user: AppUser) => {
     await dispatch(deleteUserAsync(user.id));
     setConfirmDelete(null);
   };
 
   return (
-    <div className="flex flex-col w-full min-h-screen p-6 gap-5 max-w-7xl mx-auto">
+    <div className="flex flex-col w-full min-h-screen p-6 gap-5 max-w-screen-2xl mx-auto">
       <div className="flex justify-between items-start gap-4 flex-wrap">
         <PageHeader
           indicator="Administración"
@@ -60,7 +67,7 @@ export default function ConfigPage() {
             dispatch(clearUsersMutationError());
             setEditing("new");
           }}
-          className="flex items-center gap-2 bg-[#0047AC] text-white text-sm px-4 py-2.5 rounded-xl cursor-pointer font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+          className="flex items-center gap-2 bg-[#0047AC] text-white text-sm px-4 py-2.5 rounded-md cursor-pointer font-semibold hover:bg-blue-700 transition-colors "
         >
           <Plus size={15} />
           Nuevo Usuario
@@ -68,7 +75,7 @@ export default function ConfigPage() {
       </div>
 
       {mutationError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 flex justify-between items-start">
+        <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700 flex justify-between items-start">
           <div>
             <strong className="block text-xs uppercase tracking-wider mb-1">Error</strong>
             {mutationError}
@@ -82,15 +89,15 @@ export default function ConfigPage() {
         </div>
       )}
 
-      <div className="flex flex-col bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+      <div className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden ">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <Th>Usuario</Th>
+                <Th>Email</Th>
                 <Th>Rol</Th>
                 <Th>Departamentos</Th>
-                <Th>ID</Th>
                 <Th></Th>
               </tr>
             </thead>
@@ -116,10 +123,13 @@ export default function ConfigPage() {
                       </div>
                     </Td>
                     <Td>
-                      {role && (
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${role.bg} text-white`}>
-                          <role.icon size={11} />
-                          {role.label}
+                      <span className="text-xs text-gray-500">{u.email ?? "—"}</span>
+                    </Td>
+                    <Td>
+                      {u.role === "master" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-sm bg-indigo-600 text-white">
+                          <Crown size={11} />
+                          Master
                         </span>
                       )}
                     </Td>
@@ -129,34 +139,55 @@ export default function ConfigPage() {
                       ) : (
                         <div className="flex gap-1 flex-wrap">
                           {u.departments.map((d) => (
-                            <span key={d} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">
-                              {DEPARTMENTS[d]?.label ?? d}
+                            <span key={d.departmentId} className="inline-flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">
+                              {DEPARTMENTS[d.departmentId as DepartmentId]?.label ?? d.departmentId}
+                              {u.role !== "master" && (
+                                <span className={`text-[9px] font-bold px-1 rounded-sm ${d.role === "admin" ? "bg-[#0047AC] text-white" : "bg-slate-400 text-white"}`}>
+                                  {d.role === "admin" ? "A" : "U"}
+                                </span>
+                              )}
                             </span>
                           ))}
                         </div>
                       )}
                     </Td>
                     <Td>
-                      <span className="text-xs font-mono text-gray-400">{u.id}</span>
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
+                      <div
+                        className="relative flex justify-end"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
                         <button
-                          onClick={() => setEditing(u)}
-                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                          onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                          className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Opciones"
                         >
-                          <Pencil size={12} />
-                          Editar
+                          <Settings size={14} />
                         </button>
-                        <button
-                          onClick={() => setConfirmDelete(u)}
-                          disabled={isSelf}
-                          title={isSelf ? "No puedes eliminar tu propia cuenta" : ""}
-                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-500 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 size={12} />
-                          Eliminar
-                        </button>
+                        {openMenuId === u.id && (
+                          <div className="absolute right-0 top-[calc(100%+4px)] z-50 bg-white border border-gray-200 rounded-md shadow-sm min-w-36 overflow-hidden">
+                            <button
+                              onClick={() => {
+                                dispatch(clearUsersMutationError());
+                                setEditing(u);
+                                setOpenMenuId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                            >
+                              <Pencil size={13} />
+                              Editar
+                            </button>
+                            <div className="border-t border-gray-100" />
+                            <button
+                              onClick={() => { setConfirmDelete(u); setOpenMenuId(null); }}
+                              disabled={isSelf}
+                              title={isSelf ? "No puedes eliminar tu propia cuenta" : ""}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Trash2 size={13} />
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </Td>
                   </tr>
@@ -175,7 +206,7 @@ export default function ConfigPage() {
           onClose={() => setEditing(null)}
           onSubmit={async (body) => {
             if (editing === "new") {
-              const result = await dispatch(createUserAsync(body));
+              const result = await dispatch(createUserAsync({ ...body, password: body.password! }));
               if (createUserAsync.fulfilled.match(result)) setEditing(null);
             } else {
               const result = await dispatch(
@@ -200,6 +231,8 @@ export default function ConfigPage() {
 
 // ─── User form modal ──────────────────────────────────────────────────────────
 
+type DeptEntry = { departmentId: DepartmentId; role: "admin" | "user" };
+
 function UserFormModal({
   mode,
   initial,
@@ -212,38 +245,54 @@ function UserFormModal({
   isSelf: boolean;
   onClose: () => void;
   onSubmit: (body: {
-    id?: string;
     name: string;
+    email: string;
     password?: string;
     role: UserRole;
-    departments: DepartmentId[];
+    departments: DeptEntry[];
   }) => void;
 }) {
-  const [id, setId] = useState(initial?.id ?? "");
   const [name, setName] = useState(initial?.name ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>(initial?.role ?? "user");
-  const [departments, setDepartments] = useState<DepartmentId[]>(
+  const [departments, setDepartments] = useState<DeptEntry[]>(
     initial?.departments ?? [],
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const isDeptChecked = (d: DepartmentId) =>
+    departments.some((x) => x.departmentId === d);
+
+  const getDeptRole = (d: DepartmentId): "admin" | "user" =>
+    departments.find((x) => x.departmentId === d)?.role ?? "user";
+
   const toggleDept = (d: DepartmentId) => {
     setDepartments((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d],
+      isDeptChecked(d)
+        ? prev.filter((x) => x.departmentId !== d)
+        : [...prev, { departmentId: d, role: "user" }],
+    );
+  };
+
+  const setDeptRole = (d: DepartmentId, r: "admin" | "user") => {
+    setDepartments((prev) =>
+      prev.map((x) => (x.departmentId === d ? { ...x, role: r } : x)),
     );
   };
 
   const handleSubmit = () => {
     const e: Record<string, string> = {};
     if (name.trim().length < 2) e.name = "Nombre requerido (≥ 2 caracteres)";
+    if (mode === "create" && !email.trim()) {
+      e.email = "Email requerido";
+    } else if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      e.email = "Email inválido";
+    }
     if (mode === "create" && password.length < 6) {
       e.password = "Contraseña requerida (≥ 6 caracteres)";
     } else if (mode === "edit" && password.length > 0 && password.length < 6) {
       e.password = "Mínimo 6 caracteres";
-    }
-    if (mode === "create" && id.trim() && !/^[a-zA-Z0-9_-]{2,40}$/.test(id.trim())) {
-      e.id = "Solo letras, números, _ y -. 2–40 chars";
     }
     if (Object.keys(e).length > 0) {
       setErrors(e);
@@ -251,8 +300,8 @@ function UserFormModal({
     }
 
     onSubmit({
-      id: mode === "create" && id.trim() ? id.trim() : undefined,
       name: name.trim(),
+      email: email.trim(),
       password: password.length > 0 ? password : undefined,
       role,
       departments,
@@ -261,30 +310,17 @@ function UserFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-sm max-w-xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
           <h3 className="text-base font-bold text-gray-900">
             {mode === "create" ? "Nuevo Usuario" : `Editar ${initial?.name}`}
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
             <X size={16} />
           </button>
         </div>
 
         <div className="p-6 flex flex-col gap-4">
-          {mode === "create" && (
-            <Field label="ID (opcional)" hint="Auto-generado si se omite. Ej: admin_carlos" error={errors.id}>
-              <input
-                value={id}
-                onChange={(e) => { setId(e.target.value); setErrors((p) => ({ ...p, id: "" })); }}
-                placeholder="ej. admin_carlos"
-                className={`w-full bg-gray-50 border rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 font-mono ${
-                  errors.id ? "border-red-400" : "border-gray-200"
-                }`}
-              />
-            </Field>
-          )}
-
           <Field
             label="Nombre completo"
             hint="Avatar = primera letra del primer nombre + primera letra del primer apellido"
@@ -294,8 +330,20 @@ function UserFormModal({
               value={name}
               onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
               placeholder="ej. Diana Reyes"
-              className={`w-full bg-gray-50 border rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
+              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
                 errors.name ? "border-red-400" : "border-gray-200"
+              }`}
+            />
+          </Field>
+
+          <Field label="Email" error={errors.email}>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
+              placeholder="ej. diana@leterago.com"
+              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
+                errors.email ? "border-red-400" : "border-gray-200"
               }`}
             />
           </Field>
@@ -310,7 +358,7 @@ function UserFormModal({
               value={password}
               onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
               placeholder={mode === "edit" ? "••••••" : ""}
-              className={`w-full bg-gray-50 border rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
+              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
                 errors.password ? "border-red-400" : "border-gray-200"
               }`}
             />
@@ -328,7 +376,7 @@ function UserFormModal({
                     type="button"
                     disabled={wouldDemoteSelf}
                     onClick={() => setRole(r.value)}
-                    className={`flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl border font-semibold transition-all ${
+                    className={`flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-md border font-semibold transition-all ${
                       isCurrent
                         ? "bg-[#0047AC]/10 border-[#0047AC] text-[#0047AC]"
                         : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
@@ -345,25 +393,56 @@ function UserFormModal({
           <Field label="Departamentos">
             <div className="flex flex-col gap-2">
               {DEPARTMENT_LIST.map((d) => {
-                const checked = departments.includes(d);
+                const checked = isDeptChecked(d);
+                const dRole   = getDeptRole(d);
                 return (
-                  <button
+                  <div
                     key={d}
-                    type="button"
-                    onClick={() => toggleDept(d)}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-sm transition cursor-pointer text-left ${
-                      checked
-                        ? "bg-blue-50 border-[#0047AC] text-[#0047AC]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-md border text-sm transition ${
+                      checked ? "bg-blue-50 border-[#0047AC]" : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                      checked ? "bg-[#0047AC] border-[#0047AC]" : "border-gray-400"
-                    }`}>
-                      {checked && <div className="w-2 h-2 bg-white rounded-sm" />}
-                    </div>
-                    <span className="font-medium">{DEPARTMENTS[d].label}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleDept(d)}
+                      className="flex items-center gap-3 flex-1 text-left cursor-pointer"
+                    >
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                        checked ? "bg-[#0047AC] border-[#0047AC]" : "border-gray-400"
+                      }`}>
+                        {checked && <div className="w-2 h-2 bg-white rounded-sm" />}
+                      </div>
+                      <span className={`font-medium ${checked ? "text-[#0047AC]" : "text-gray-600"}`}>
+                        {DEPARTMENTS[d].label}
+                      </span>
+                    </button>
+                    {checked && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setDeptRole(d, "admin")}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
+                            dRole === "admin"
+                              ? "bg-[#0047AC] border-[#0047AC] text-white"
+                              : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                          }`}
+                        >
+                          Admin
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeptRole(d, "user")}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
+                            dRole === "user"
+                              ? "bg-slate-500 border-slate-500 text-white"
+                              : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                          }`}
+                        >
+                          Usuario
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -373,13 +452,13 @@ function UserFormModal({
         <div className="flex gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
           <button
             onClick={onClose}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50"
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700"
+            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700"
           >
             {mode === "create" ? "Crear Usuario" : "Guardar Cambios"}
           </button>
@@ -396,10 +475,10 @@ function DeleteModal({
 }: { user: AppUser; onCancel: () => void; onConfirm: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+      <div className="bg-white rounded-lg shadow-sm max-w-sm w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-gray-900">¿Eliminar usuario?</h3>
-          <button onClick={onCancel} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onCancel} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
             <X size={16} />
           </button>
         </div>
@@ -410,13 +489,13 @@ function DeleteModal({
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50"
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 bg-red-500 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-red-600"
+            className="flex-1 bg-red-500 text-white py-2.5 rounded-md text-sm font-semibold hover:bg-red-600"
           >
             Eliminar
           </button>

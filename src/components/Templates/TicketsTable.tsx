@@ -1,20 +1,33 @@
-import { Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatDate } from "../../lib/formatDate";
 import { useMemo, useState } from "react";
 import type { Ticket } from "../../types/types";
 import Badged from "../Atoms/Badged";
 import { useAppSelector, useCurrentUser } from "../../store/hooks";
 import { useNavigate } from "react-router-dom";
 import { CATEGORIES, DEPARTMENTS, getCategoriesForDepartments } from "../../config/catalog";
+import type { DepartmentId } from "../../types/types";
+
+const ALL_DEPT_IDS = Object.keys(DEPARTMENTS) as DepartmentId[];
 
 function TicketsTable() {
   const { tickets } = useAppSelector((s) => s.tickets);
   const currentUser = useCurrentUser();
   const navigate = useNavigate();
 
+  const userDeptIds: DepartmentId[] = currentUser.role === "master"
+    ? ALL_DEPT_IDS
+    : currentUser.departments.map((d) => d.departmentId as DepartmentId);
+
   const visible: Ticket[] = useMemo(() => {
-    const accessibleCats = getCategoriesForDepartments(currentUser.departments);
+    if (currentUser.role === "user") {
+      return tickets.filter(
+        (t) => t.createdById === currentUser.id || t.assignedTo === currentUser.name,
+      );
+    }
+    const accessibleCats = getCategoriesForDepartments(userDeptIds);
     return tickets.filter((t) => accessibleCats.includes(t.categoryId));
-  }, [tickets, currentUser]);
+  }, [tickets, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -40,10 +53,10 @@ function TicketsTable() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const showDeptFilter = currentUser.departments.length > 1;
+  const showDeptFilter = userDeptIds.length > 1;
 
   return (
-    <div className="flex flex-col bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+    <div className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden ">
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
         <div className="relative flex-1 min-w-48">
@@ -52,14 +65,14 @@ function TicketsTable() {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar por ID, título o responsable..."
-            className="w-full rounded-xl border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-[#0047AC] transition-all"
+            className="w-full rounded-md border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-[#0047AC] transition-all"
           />
         </div>
 
         {showDeptFilter && (
           <FilterSelect value={deptFilter} onChange={(v) => { setDeptFilter(v); setPage(1); }} label="Área">
             <option value="all">Todos los departamentos</option>
-            {currentUser.departments.map((dId) => (
+            {userDeptIds.map((dId) => (
               <option key={dId} value={dId}>{DEPARTMENTS[dId].label}</option>
             ))}
           </FilterSelect>
@@ -99,12 +112,12 @@ function TicketsTable() {
             <tr className="bg-gray-50 border-b border-gray-100">
               <Th>ID</Th>
               <Th>Título</Th>
+              <Th>Creado por</Th>
               <Th>Departamento / Categoría</Th>
-              <Th>Prioridad</Th>
-              <Th>Estado</Th>
+              <Th center>Prioridad</Th>
               <Th>Asignado a</Th>
-              <Th>Fecha</Th>
-              <Th></Th>
+              <Th center>Estado</Th>
+              <Th>Fecha de creación</Th>
             </tr>
           </thead>
           <tbody>
@@ -134,13 +147,20 @@ function TicketsTable() {
                     )}
                   </Td>
                   <Td>
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-100 text-[#0047AC] text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {row.createdBy.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+                      </div>
+                      <span className="text-gray-700 text-xs whitespace-nowrap">{row.createdBy}</span>
+                    </div>
+                  </Td>
+                  <Td>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-gray-700 text-xs font-semibold">{dept?.label ?? row.departmentId}</span>
                       <span className="text-gray-400 text-xs">{cat?.label ?? row.categoryId}</span>
                     </div>
                   </Td>
-                  <Td><Badged variant={row.priority} /></Td>
-                  <Td><Badged variant={row.status} /></Td>
+                  <Td><div className="flex justify-center"><Badged variant={row.priority} /></div></Td>
                   <Td>
                     {row.assignedTo ? (
                       <div className="flex items-center gap-2">
@@ -153,16 +173,9 @@ function TicketsTable() {
                       <span className="text-gray-400 text-xs italic">Sin asignar</span>
                     )}
                   </Td>
+                  <Td><div className="flex justify-center"><Badged variant={row.status} /></div></Td>
                   <Td>
-                    <span className="text-gray-500 text-xs whitespace-nowrap">{row.createdAt}</span>
-                  </Td>
-                  <Td>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/ticket-detail/${row.id}`); }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-blue-100 text-[#0047AC]"
-                    >
-                      <Eye size={15} />
-                    </button>
+                    <span className="text-gray-500 text-xs whitespace-nowrap">{formatDate(row.createdAt)}</span>
                   </Td>
                 </tr>
               );
@@ -182,7 +195,7 @@ function TicketsTable() {
           <button
             disabled={page === 1}
             onClick={() => setPage((p) => p - 1)}
-            className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50 transition-colors"
+            className="p-1.5 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 transition-colors"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
@@ -190,7 +203,7 @@ function TicketsTable() {
             <button
               key={p}
               onClick={() => setPage(p)}
-              className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${
+              className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
                 p === page ? "bg-[#0047AC] text-white" : "hover:bg-gray-100 text-gray-600"
               }`}
             >
@@ -200,7 +213,7 @@ function TicketsTable() {
           <button
             disabled={page === totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50 transition-colors"
+            className="p-1.5 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 transition-colors"
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
@@ -210,8 +223,8 @@ function TicketsTable() {
   );
 }
 
-const Th = ({ children }: { children?: React.ReactNode }) => (
-  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+const Th = ({ children, center }: { children?: React.ReactNode; center?: boolean }) => (
+  <th className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 ${center ? "text-center" : "text-left"}`}>
     {children}
   </th>
 );
@@ -222,7 +235,7 @@ const Td = ({ children }: { children?: React.ReactNode }) => (
 
 function FilterSelect({ value, onChange, label, children }: { value: string; onChange: (v: string) => void; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
+    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5">
       <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{label}:</span>
       <select
         value={value}

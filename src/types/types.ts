@@ -27,7 +27,6 @@ export type Ticket = {
   id: string;
   title: string;
   description?: string;
-  note?: string;
 
   departmentId: DepartmentId;
   categoryId: CategoryId;
@@ -35,11 +34,11 @@ export type Ticket = {
   status: TicketStatus;
   priority: TicketPriority;
 
-  assignedTo?: string;
+  createdById: string;
   createdBy: string;
+  assignedTo?: string;
 
-  executionDate?: string;
-  executionTime?: string;
+  executionAt?: string;
 
   /** Category-specific data (loaded only on detail responses, undefined otherwise). */
   payload?: unknown;

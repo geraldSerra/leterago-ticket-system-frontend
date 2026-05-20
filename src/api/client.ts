@@ -6,8 +6,7 @@ import type {
 } from "../types/types";
 
 const API_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  "http://localhost:3001/api";
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
 
 export class ApiError extends Error {
   constructor(
@@ -28,15 +27,15 @@ type ServerUserRef = {
 export type ServerUser = {
   id: string;
   name: string;
+  email: string;
   role: "master" | "admin" | "user";
-  departments: DepartmentId[];
+  departments: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
 };
 
 export type ServerTicket = {
   id: string;
   title: string;
   description: string | null;
-  note: string | null;
   departmentId: DepartmentId;
   categoryId: CategoryId;
   status: TicketStatus;
@@ -45,8 +44,7 @@ export type ServerTicket = {
   createdBy: ServerUserRef | null;
   assignedToId: string | null;
   assignedTo: ServerUserRef | null;
-  executionDate: string | null;
-  executionTime: string | null;
+  executionAt: string | null;
   payload: unknown | null;
   payloadVersion: number | null;
   createdAt: string;
@@ -63,25 +61,21 @@ export type ServerTicketList = {
 export type CreateTicketBody = {
   title: string;
   description?: string;
-  note?: string;
   departmentId: DepartmentId;
   categoryId: CategoryId;
   priority: TicketPriority;
   assignedToId?: string;
-  executionDate?: string;
-  executionTime?: string;
+  executionAt?: string;
   payload?: unknown;
 };
 
 export type UpdateTicketBody = {
   title?: string;
   description?: string | null;
-  note?: string | null;
   status?: TicketStatus;
   priority?: TicketPriority;
   assignedToId?: string | null;
-  executionDate?: string | null;
-  executionTime?: string | null;
+  executionAt?: string | null;
   payload?: unknown;
 };
 
@@ -106,7 +100,7 @@ async function request<T>(
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": userId,
+      ...(userId ? { "x-user-id": userId } : {}),
       ...(init.headers ?? {}),
     },
   });
@@ -138,18 +132,19 @@ function buildQuery(query: Record<string, unknown> | undefined): string {
 }
 
 export type CreateUserBody = {
-  id?: string;
   name: string;
+  email: string;
   password: string;
   role: "master" | "admin" | "user";
-  departments: DepartmentId[];
+  departments: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
 };
 
 export type UpdateUserBody = {
   name?: string;
+  email?: string;
   password?: string;
   role?: "master" | "admin" | "user";
-  departments?: DepartmentId[];
+  departments?: Array<{ departmentId: DepartmentId; role: "admin" | "user" }>;
 };
 
 export const api = {
@@ -174,6 +169,13 @@ export const api = {
 
   deleteTicket: (userId: string, id: string) =>
     request<void>(`/tickets/${id}`, userId, { method: "DELETE" }),
+
+  // Auth
+  login: (email: string, password: string) =>
+    request<ServerUser>("/auth/login", "", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
 
   // Users
   listUsers: (

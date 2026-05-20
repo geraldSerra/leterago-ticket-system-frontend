@@ -133,7 +133,7 @@ export default function AssigneePicker({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full px-2.5 py-2 text-[13px] rounded-xl border border-gray-200 bg-gray-50 text-gray-900 cursor-pointer transition-colors hover:border-gray-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        className="flex items-center gap-2 w-full px-2.5 py-2 text-[13px] rounded-md border border-gray-200 bg-gray-50 text-gray-900 cursor-pointer transition-colors hover:border-gray-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
         <Avatar user={selected ?? null} />
         <span className={`flex-1 text-left truncate text-sm ${selected ? "text-gray-900 font-medium" : "text-gray-400"}`}>
@@ -151,7 +151,7 @@ export default function AssigneePicker({
       {open && (
         <div
           role="listbox"
-          className="absolute top-[calc(100%+4px)] left-0 w-64 z-50 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xl shadow-gray-100/80"
+          className="absolute top-[calc(100%+4px)] left-0 w-64 z-50 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm"
         >
           {/* Search */}
           <div className="p-2 border-b border-gray-100">
@@ -161,7 +161,7 @@ export default function AssigneePicker({
               placeholder="Buscar usuario..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#0047AC] transition-colors"
+              className="w-full px-2.5 py-1.5 text-xs rounded border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#0047AC] transition-colors"
             />
           </div>
 
