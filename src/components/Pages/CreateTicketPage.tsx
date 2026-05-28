@@ -41,7 +41,6 @@ export default function CreateTicketPage() {
   return (
     <div className="flex flex-col w-full min-h-screen p-6 max-w-7xl mx-auto">
       <PageHeader
-        indicator="Nuevo Ticket"
         title="Crear Solicitud"
         description="Seleccione el tipo de solicitud para dirigir su requerimiento al equipo correcto."
       />
@@ -71,7 +70,7 @@ export default function CreateTicketPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {visibleCategories.map((catId) => {
           const cat = CATEGORIES[catId];
           // Find which department this category belongs to
@@ -84,25 +83,30 @@ export default function CreateTicketPage() {
             <button
               key={catId}
               onClick={() => navigate(`/create-ticket?category=${catId}`)}
-              className="group text-left bg-white border border-gray-200 rounded-lg p-6 hover:border-[#0047AC]  transition-all duration-200 cursor-pointer"
+              className="group text-left bg-white border border-gray-200 rounded-lg p-6 hover:border-[#0047AC] hover:scale-[1.02] transition-all duration-200 cursor-pointer"
             >
-              {/* Department tag */}
-              {dept && (
-                <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 bg-gray-100 px-2 py-0.5 rounded-md">
-                  {dept.label}
-                </span>
-              )}
-              <div className={`w-12 h-12 ${cat.iconBg} rounded-md flex items-center justify-center mb-3`}>
-                <Icon className={`w-6 h-6 ${cat.iconColor}`} />
+              <div className="flex items-center justify-between gap-4">
+                {/* Left: title, description, cta */}
+                <div className="flex flex-col flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-gray-900 mb-1.5">
+                    {cat.label}
+                  </h3>
+                  <p className="text-gray-400 text-sm leading-relaxed mb-4">{cat.description}</p>
+                  <span className="flex items-center gap-1.5 text-[#0047AC] text-sm font-semibold opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+                    Seleccionar
+                    <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform duration-200" />
+                  </span>
+                </div>
+                {/* Right: icon top, tag bottom */}
+                <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                  <Icon className="w-16 h-16 text-gray-300 dark:text-gray-500 group-hover:text-[#0047AC] dark:group-hover:text-blue-400 transition-colors" />
+                  {dept && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white bg-[#0047AC] px-2 py-0.5 rounded-md whitespace-nowrap">
+                      {dept.label}
+                    </span>
+                  )}
+                </div>
               </div>
-              <h3 className="text-base font-bold text-gray-900 mb-1.5 group-hover:text-[#0047AC] transition-colors">
-                {cat.label}
-              </h3>
-              <p className="text-gray-400 text-sm leading-relaxed mb-4">{cat.description}</p>
-              <span className="flex items-center gap-1.5 text-[#0047AC] text-sm font-semibold">
-                Seleccionar
-                <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
-              </span>
             </button>
           );
         })}

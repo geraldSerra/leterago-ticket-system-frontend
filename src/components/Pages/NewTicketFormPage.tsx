@@ -156,7 +156,6 @@ export default function NewTicketFormPage() {
           <ArrowLeft size={18} />
         </button>
         <PageHeader
-          indicator="Creación de solicitud"
           title={catDef.label}
           description="Complete los campos para registrar su requerimiento."
         />

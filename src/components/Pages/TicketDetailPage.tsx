@@ -10,14 +10,19 @@ import Badge from "../Atoms/Badged";
 import {
   ArrowLeft,
   ChevronDown, Pencil, Trash2, X, Check, Settings,
-  TrendingDown, Minus, TrendingUp, TriangleAlert,
+  TrendingDown, Minus, TrendingUp, TriangleAlert, Download,
 } from "lucide-react";
+import { exportMantenimientoDocx } from "../../lib/exportMantenimiento";
+import type { SolicitudMantenimientoPayload } from "../../forms/SolicitudMantenimientoForm";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { type User as AssigneeUser } from "../Organisms/AssigneePicker";
 import { canEditTicket, canChangeStatus, canAssign, canConfirm } from "../../store/permissions";
 import { getCategoryForm } from "../../forms/registry";
 import TicketDetailsPanel from "../Organisms/TicketDetailsPanel";
-import { formatDate } from "../../lib/formatDate";
+import TicketComments from "../Organisms/TicketComments";
+import { formatDate, formatDateTime } from "../../lib/formatDate";
+import { api } from "../../api/client";
+import type { TicketEvent } from "../../types/types";
 
 const statusOptions: TicketStatus[] = ["pending", "in_progress", "completed", "confirmed", "canceled"];
 const statusLabels: Record<TicketStatus, string> = {
@@ -28,6 +33,28 @@ const priorityLabels: Record<TicketPriority, string> = {
   urgent: "Urgente", high: "Alta", medium: "Media", low: "Baja",
 };
 const priorityOptions: TicketPriority[] = ["urgent", "high", "medium", "low"];
+
+// ─── Event display ───────────────────────────────────────────────────────────
+const statusDisplayLabels: Record<string, string> = {
+  pending: "Pendiente", in_progress: "En progreso", completed: "Resuelto",
+  confirmed: "Confirmado", canceled: "Cancelado",
+};
+const priorityDisplayLabels: Record<string, string> = {
+  urgent: "Urgente", high: "Alta", medium: "Media", low: "Baja",
+};
+
+function eventDisplay(e: TicketEvent): { title: string; color: string } {
+  switch (e.type) {
+    case "created":          return { title: "Ticket creado",                                          color: "bg-[#0047AC]"   };
+    case "status_changed":   return { title: `Estado → ${statusDisplayLabels[e.to ?? ""] ?? e.to}`,   color: "bg-emerald-500" };
+    case "assigned":         return { title: `Asignado a ${e.to}`,                                    color: "bg-indigo-400"  };
+    case "unassigned":       return { title: "Asignación removida",                                   color: "bg-orange-400"  };
+    case "priority_changed": return { title: `Prioridad → ${priorityDisplayLabels[e.to ?? ""] ?? e.to}`, color: "bg-amber-400" };
+    case "title_changed":    return { title: "Título actualizado",                                    color: "bg-gray-400"    };
+    case "payload_updated":  return { title: "Detalles actualizados",                                 color: "bg-purple-400"  };
+    default:                 return { title: e.type,                                                  color: "bg-gray-400"    };
+  }
+}
 
 // ─── Box-style dropdown ───────────────────────────────────────────────────────
 function BoxDropdown<T extends string>({
@@ -51,7 +78,7 @@ function BoxDropdown<T extends string>({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex flex-row items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:border-[#0047AC] hover:bg-blue-50/30 transition-colors"
+        className="flex flex-row items-center gap-3 border border-gray-300 rounded-lg px-3 py-2 hover:border-[#0047AC] hover:bg-blue-50/30 transition-colors"
       >
         <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider shrink-0">{label}</span>
         <div className="flex items-center gap-1.5">
@@ -60,7 +87,7 @@ function BoxDropdown<T extends string>({
         </div>
       </button>
       {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] bg-white border border-gray-200 rounded-lg shadow-sm z-50 overflow-hidden min-w-44">
+        <div className="absolute right-0 top-[calc(100%+6px)] bg-white border border-gray-300 rounded-lg shadow-sm z-50 overflow-hidden min-w-44">
           {options.map((opt) => (
             <button
               key={opt}
@@ -97,7 +124,7 @@ function DeleteModal({
         </p>
         <div className="flex gap-3">
           <button onClick={onCancel}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">
+            className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">
             Cancelar
           </button>
           <button onClick={onConfirm}
@@ -146,6 +173,7 @@ export default function TicketDetail() {
   const [editing,         setEditing]         = useState(false);
   const [showDelete,      setShowDelete]      = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [exporting,       setExporting]       = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,6 +184,16 @@ export default function TicketDetail() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+
+  const [events, setEvents] = useState<TicketEvent[]>([]);
+
+  useEffect(() => {
+    if (id && currentUser) {
+      api.listEvents(currentUser.id, id)
+        .then(setEvents)
+        .catch(() => {});
+    }
+  }, [id, currentUser.id]);
 
   const [editTitle,       setEditTitle]       = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -208,8 +246,8 @@ export default function TicketDetail() {
     setEditing(true);
   };
 
-  const saveEdit = () => {
-    dispatch(updateTicketAsync({
+  const saveEdit = async () => {
+    await dispatch(updateTicketAsync({
       id: ticket.id,
       changes: {
         title:        editTitle,
@@ -221,6 +259,7 @@ export default function TicketDetail() {
       },
     }));
     setEditing(false);
+    api.listEvents(currentUser.id, ticket.id).then(setEvents).catch(() => {});
   };
 
   return (
@@ -236,7 +275,7 @@ export default function TicketDetail() {
       <div className="min-h-screen bg-gray-50 p-6 max-w-7xl mx-auto">
 
         {/* ── Top action bar ── */}
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap mb-6">
+        <div className="bg-white border border-gray-300 rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap mb-6">
           {/* Left: back + ID + badges */}
           <div className="flex items-center gap-3 flex-wrap">
             <button
@@ -260,7 +299,10 @@ export default function TicketDetail() {
                 options={allowedStatuses}
                 optionLabels={statusLabels}
                 current={ticket.status}
-                onSelect={(s) => dispatch(updateTicketAsync({ id: ticket.id, changes: { status: s } }))}
+                onSelect={async (s) => {
+                  await dispatch(updateTicketAsync({ id: ticket.id, changes: { status: s } }));
+                  api.listEvents(currentUser.id, ticket.id).then(setEvents).catch(() => {});
+                }}
               />
             )}
 
@@ -272,7 +314,7 @@ export default function TicketDetail() {
                   className="p-2 rounded-md hover:bg-gray-100 text-gray-500 transition-all"
                 ><Settings size={24} /></button>
                 {showActionsMenu && (
-                  <div className="absolute right-0 top-[calc(100%+6px)] z-50 bg-white border border-gray-200 rounded-lg shadow-sm min-w-36 overflow-hidden">
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-50 bg-white border border-gray-300 rounded-lg shadow-sm min-w-36 overflow-hidden">
                     <button
                       onClick={() => { startEdit(); setShowActionsMenu(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
@@ -296,7 +338,7 @@ export default function TicketDetail() {
               <>
                 <button
                   onClick={() => setEditing(false)}
-                  className="flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-2 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-600"
+                  className="flex items-center gap-1.5 border border-gray-300 rounded-md px-3 py-2 text-sm bg-white hover:bg-gray-50 font-semibold text-gray-600"
                 >
                   <X size={13} />Cancelar
                 </button>
@@ -316,7 +358,7 @@ export default function TicketDetail() {
           <input
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
-            className="w-full text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-200 py-2 mb-6 outline-none focus:border-[#0047AC] transition-colors"
+            className="w-full text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-300 py-2 mb-6 outline-none focus:border-[#0047AC] transition-colors"
           />
         ) : (
           <h1 className="text-2xl font-bold text-gray-900 mb-6">{ticket.title}</h1>
@@ -327,7 +369,7 @@ export default function TicketDetail() {
           <div className="lg:col-span-2 flex flex-col gap-4">
 
             {/* Description */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5 ">
+            <div className="bg-white rounded-lg border border-gray-300 p-5 ">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">
                 Descripción
               </p>
@@ -336,7 +378,7 @@ export default function TicketDetail() {
                   rows={8}
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] resize-none"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] resize-none"
                 />
               ) : (
                 <p className="text-sm text-gray-600 leading-relaxed">
@@ -350,9 +392,33 @@ export default function TicketDetail() {
             {/* Category-specific form (read-only when not editing) */}
             {formDef && (
               <div className="flex flex-col gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-1">
-                  Detalles de la solicitud
-                </p>
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Detalles de la solicitud
+                  </p>
+                  {ticket.categoryId === "solicitud-mantenimiento" && !editing && (
+                    <button
+                      onClick={async () => {
+                        if (exporting) return;
+                        setExporting(true);
+                        try {
+                          const merged = {
+                            ...(formDef.defaultValue as Record<string, unknown>),
+                            ...(ticket.payload as Record<string, unknown> ?? {}),
+                          } as SolicitudMantenimientoPayload;
+                          await exportMantenimientoDocx(ticket, merged);
+                        } finally {
+                          setExporting(false);
+                        }
+                      }}
+                      disabled={exporting}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-[#0047AC] hover:text-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Download size={13} />
+                      {exporting ? "Generando..." : "Descargar Word"}
+                    </button>
+                  )}
+                </div>
                 <formDef.Component
                   value={editing
                     ? editPayload
@@ -360,44 +426,39 @@ export default function TicketDetail() {
                   }
                   onChange={editing ? setEditPayload : () => {}}
                   readOnly={!editing}
+                  showExecSection={true}
                 />
               </div>
             )}
 
-            {/* Activity */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5 ">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">
-                Actividad
-              </p>
-              <div className="flex flex-col">
-                <TimelineItem
-                  color="bg-[#0047AC]"
-                  title="Ticket creado"
-                  subtitle={`por ${ticket.createdBy} · ${formatDate(ticket.createdAt)}`}
-                  last={ticket.status === "pending" && !ticket.assignedTo}
-                />
-                {ticket.assignedTo && (
-                  <TimelineItem
-                    color="bg-indigo-400"
-                    title={`Asignado a ${ticket.assignedTo}`}
-                    subtitle="Asignación registrada"
-                    last={ticket.status === "pending"}
-                  />
-                )}
-                {ticket.status !== "pending" && (
-                  <TimelineItem
-                    color="bg-emerald-500"
-                    title={`Estado actualizado: ${statusLabels[ticket.status]}`}
-                    subtitle={`Última actualización · ${formatDate(ticket.updatedAt)}`}
-                    last
-                  />
-                )}
-              </div>
-            </div>
+            {/* Comments */}
+            <TicketComments ticketId={ticket.id} />
           </div>
 
           {/* ── Right ── */}
           <div className="flex flex-col gap-4">
+
+            {/* Priority card */}
+            {!editing && (() => {
+              const { bg, sub } = {
+                urgent: { bg: "from-[#ef4444] to-[#dc2626]", sub: "text-red-200"    },
+                high:   { bg: "from-[#f97316] to-[#ea580c]", sub: "text-orange-200" },
+                medium: { bg: "from-[#eab308] to-[#ca8a04]", sub: "text-yellow-100" },
+                low:    { bg: "from-[#22c55e] to-[#16a34a]", sub: "text-green-200"  },
+              }[ticket.priority];
+              return (
+                <div className={`bg-gradient-to-br ${bg} rounded-lg p-5 text-white`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${sub} mb-2`}>Prioridad</p>
+                  <p className="text-2xl font-bold">{priorityLabels[ticket.priority]}</p>
+                  <p className={`text-xs ${sub} mt-1`}>
+                    {ticket.priority === "urgent" && "SLA: 1–2 horas"}
+                    {ticket.priority === "high"   && "SLA: 12–24 horas"}
+                    {ticket.priority === "medium" && "SLA: 2–4 días"}
+                    {ticket.priority === "low"    && "SLA: 4–7 días"}
+                  </p>
+                </div>
+              );
+            })()}
 
             {editing ? (
               <TicketDetailsPanel
@@ -424,24 +485,28 @@ export default function TicketDetail() {
               />
             )}
 
-            {/* Priority card */}
-            {!editing && <div className="bg-gradient-to-br from-[#0047AC] to-blue-800 rounded-lg p-5 text-white">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-200 mb-2">Prioridad</p>
-              <p className="text-2xl font-bold">{priorityLabels[ticket.priority]}</p>
-              <p className="text-xs text-blue-200 mt-1">
-                {ticket.priority === "urgent" && "SLA: 1–2 horas"}
-                {ticket.priority === "high"   && "SLA: 12–24 horas"}
-                {ticket.priority === "medium" && "SLA: 2–4 días"}
-                {ticket.priority === "low"    && "SLA: 4–7 días"}
+            {/* Activity */}
+            <div className="bg-white rounded-lg border border-gray-300 p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">
+                Actividad
               </p>
-            </div>}
-
-            {/* Permission info chip */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-400 flex flex-col gap-1.5">
-              <p className="font-bold text-gray-500 uppercase tracking-wider text-[10px] mb-1">Tus permisos</p>
-              <PermRow allowed={canEdit}       label="Editar ticket completo" />
-              <PermRow allowed={canStatus}     label="Cambiar estado" />
-              <PermRow allowed={canAssignPerm} label="Asignar responsable" />
+              <div className="flex flex-col">
+                {events.length === 0 && (
+                  <p className="text-sm text-gray-400 italic">Sin actividad registrada.</p>
+                )}
+                {events.map((e, i) => {
+                  const { title, color } = eventDisplay(e);
+                  return (
+                    <TimelineItem
+                      key={e.id}
+                      color={color}
+                      title={title}
+                      subtitle={`${e.user.name} · ${formatDateTime(e.createdAt)}`}
+                      last={i === events.length - 1}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -450,23 +515,6 @@ export default function TicketDetail() {
   );
 }
 
-function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function PermRow({ allowed, label }: { allowed: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={`w-1.5 h-1.5 rounded-full ${allowed ? "bg-emerald-400" : "bg-gray-300"}`} />
-      <span className={allowed ? "text-gray-600" : "text-gray-400"}>{label}</span>
-    </div>
-  );
-}
 
 function TimelineItem({ color, title, subtitle, last }: {
   color: string; title: string; subtitle: string; last?: boolean;

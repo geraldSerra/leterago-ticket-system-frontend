@@ -26,10 +26,10 @@ interface BadgeProps {
 
 const Badge = ({ variant }: Readonly<BadgeProps>) => {
   const styles = {
-    urgent: "px-2 py-1 bg-white text-[#ef4444] border-gray-200 rounded-md font-normal",
-    high: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
-    medium: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
-    low: "px-2 py-1 bg-white text-[#777777] border-gray-200 rounded-md font-normal",
+    urgent: "priority-badge priority-badge--urgent px-2 py-1 bg-white text-[#ef4444] border-[#ef4444] dark:border-transparent rounded-md font-normal w-20",
+    high: "priority-badge priority-badge--high px-2 py-1 bg-white text-[#f97316] border-[#f97316] dark:border-transparent rounded-md font-normal w-20",
+    medium: "priority-badge priority-badge--medium px-2 py-1 bg-white text-[#eab308] border-[#eab308] dark:border-transparent rounded-md font-normal w-20",
+    low: "priority-badge priority-badge--low px-2 py-1 bg-white text-[#22c55e] border-[#22c55e] dark:border-transparent rounded-md font-normal w-20",
     pending:
       "px-3 py-1 bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 rounded-full",
     in_progress:
@@ -68,7 +68,7 @@ const Badge = ({ variant }: Readonly<BadgeProps>) => {
 
   return (
     <div
-      className={`flex justify-center items-center gap-1 text-[12px] border w-28 h-7 ${styles[variant]}`}
+      className={`flex justify-center items-center gap-1 text-[12px] border h-7 ${styles[variant]}`}
     >
       {icons[variant]} {texts[variant]}
     </div>

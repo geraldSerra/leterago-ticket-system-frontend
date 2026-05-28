@@ -1,73 +1,96 @@
-# React + TypeScript + Vite
+# Mesa de Servicio — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Redux Toolkit + Tailwind CSS 4 + Vite.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Estado en Redux
 
-## React Compiler
+Hay tres slices principales:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### `auth`
+```json
+{
+  "currentUser": {
+    "id": "cuid...",
+    "name": "Gerald Serra",
+    "email": "gerald@leterago.com",
+    "role": "master",
+    "status": "active",
+    "lastAccess": "2026-05-22T15:30:00.000Z",
+    "departments": [
+      { "departmentId": "compras", "role": "admin" }
+    ]
+  }
+}
+```
+Persistido en `localStorage` bajo la clave `mesa_auth_user`.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### `tickets`
+```json
+{
+  "tickets": [ ...Ticket[] ],
+  "status": "idle | loading | ready | error",
+  "fetchError": null,
+  "creating": false,
+  "createError": null,
+  "mutationError": null
+}
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Objeto `Ticket` en el store:
+```json
+{
+  "id": "TCK-001",
+  "title": "Compra de sillas",
+  "description": "...",
+  "departmentId": "compras",
+  "categoryId": "solicitud-compra",
+  "status": "in_progress",
+  "priority": "high",
+  "createdById": "cuid...",
+  "createdBy": "Gerald Serra",
+  "assignedTo": "Ana López",
+  "executionAt": "2026-06-01T00:00:00.000Z",
+  "payload": { ... },
+  "payloadVersion": 2,
+  "createdAt": "2026-05-20T10:00:00.000Z",
+  "updatedAt": "2026-05-22T14:30:00.000Z"
+}
 ```
+
+> `payload` solo está hidratado en tickets que hayan pasado por `fetchTicketDetailAsync`. Los que vienen del listado tienen `payload: undefined`.
+
+---
+
+### `users`
+```json
+{
+  "list": [ ...ServerUser[] ],
+  "status": "idle | loading | ready | error",
+  "error": null
+}
+```
+
+---
+
+## Tipos de eventos de ticket (`TicketEvent`)
+
+Los eventos se obtienen por demanda en `GET /tickets/:id/events` y se almacenan en estado local del componente `TicketDetailPage`. No pasan por Redux.
+
+```json
+{
+  "id": "cuid...",
+  "ticketId": "TCK-001",
+  "userId": "cuid...",
+  "user": { "id": "cuid...", "name": "Gerald Serra" },
+  "type": "status_changed",
+  "from": "pending",
+  "to": "in_progress",
+  "createdAt": "2026-05-22T11:00:00.000Z"
+}
+```
+
+Tipos posibles: `created`, `status_changed`, `assigned`, `unassigned`, `priority_changed`, `title_changed`, `payload_updated`.

@@ -49,21 +49,21 @@ export default function TicketDetailsPanel(props: Props) {
   const Icon = cat?.icon;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col gap-5">
+    <div className="bg-white border border-gray-300 rounded-lg p-6 flex flex-col gap-5">
       <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <span className="w-1 h-4 bg-[#0047AC] rounded-full" />
         Detalles del Ticket
       </h2>
 
       <Field label="CATEGORÍA">
-        <div className={`flex items-center gap-2.5 ${cat?.iconBg ?? "bg-gray-50"} border border-gray-200 rounded-md px-3.5 py-2.5`}>
+        <div className={`flex items-center gap-2.5 ${cat?.iconBg ?? "bg-gray-50"} dark:bg-[#2d3f55] border border-gray-300 dark:border-gray-600 rounded-md px-3.5 py-2.5`}>
           {Icon && <Icon className={`w-4 h-4 ${cat.iconColor} shrink-0`} />}
           <span className="text-sm font-semibold text-gray-800">{cat?.label ?? props.categoryId}</span>
         </div>
       </Field>
 
       <Field label="DEPARTAMENTO">
-        <div className="bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm text-gray-600 font-medium">
+        <div className="bg-gray-50 border border-gray-300 rounded-md px-3.5 py-2.5 text-sm text-gray-600 font-medium">
           {dept?.label ?? deptLabels[props.departmentId] ?? props.departmentId}
         </div>
       </Field>
@@ -123,7 +123,7 @@ export default function TicketDetailsPanel(props: Props) {
                     className={`flex items-center justify-between px-3 py-2.5 rounded-md border text-xs font-normal transition-all cursor-pointer
                       ${selected
                         ? "bg-[#0047AC]/10 border-[#0047AC] text-[#0047AC]"
-                        : `bg-white border-gray-200 ${urgentColor} hover:border-gray-300 hover:bg-gray-50`
+                        : `bg-white border-gray-300 ${urgentColor} hover:border-gray-300 hover:bg-gray-50`
                       }`}
                   >
                     <span className="flex items-center gap-1.5">{p.icon}{p.label}</span>

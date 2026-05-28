@@ -29,6 +29,8 @@ export type ServerUser = {
   name: string;
   email: string;
   role: "master" | "admin" | "participant" | "requester";
+  status: "active" | "inactive" | "pending";
+  lastAccess: string | null;
   departments: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
 };
 
@@ -49,6 +51,22 @@ export type ServerTicket = {
   payloadVersion: number | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ServerTicketEvent = {
+  id: string;
+  ticketId: string;
+  userId: string;
+  user: { id: string; name: string };
+  type: string;
+  from: string | null;
+  to: string | null;
+  createdAt: string;
+};
+
+export type ResolutionStats = {
+  avgMs: number | null;
+  count: number;
 };
 
 export type ServerTicketList = {
@@ -131,6 +149,44 @@ function buildQuery(query: Record<string, unknown> | undefined): string {
   return s ? `?${s}` : "";
 }
 
+// ─── Catalog ──────────────────────────────────────────────────────────────────
+
+export type ServerCategory = {
+  id: string;
+  name: string;
+  description: string | null;
+  departmentId: string;
+};
+
+export type ServerDepartment = {
+  id: string;
+  name: string;
+  description: string | null;
+  categories: ServerCategory[];
+};
+
+// ─── Roles & Permissions ──────────────────────────────────────────────────────
+
+export type RoleDefinition = {
+  name: string;
+  displayName: string | null;
+  description: string;
+  isSystem: boolean;
+  permissions: string[];
+};
+
+export type PermissionEntry = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  module: string;
+};
+
+export type PermissionsByModule = Record<string, PermissionEntry[]>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type CreateUserBody = {
   name: string;
   email: string;
@@ -144,7 +200,17 @@ export type UpdateUserBody = {
   email?: string;
   password?: string;
   role?: "master" | "admin" | "participant" | "requester";
+  status?: "active" | "inactive" | "pending";
   departments?: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
+};
+
+export type ServerComment = {
+  id: string;
+  ticketId: string;
+  userId: string;
+  body: string;
+  createdAt: string;
+  user: { id: string; name: string };
 };
 
 export const api = {
@@ -200,4 +266,69 @@ export const api = {
 
   deleteUser: (userId: string, id: string) =>
     request<void>(`/users/${id}`, userId, { method: "DELETE" }),
+
+  // Roles & Permissions
+  getRoles: (userId: string) =>
+    request<RoleDefinition[]>("/roles", userId),
+
+  getAllPermissions: (userId: string) =>
+    request<PermissionsByModule>("/roles/permissions", userId),
+
+  updateRolePermissions: (userId: string, roleName: string, permissionCodes: string[]) =>
+    request<RoleDefinition>(`/roles/${encodeURIComponent(roleName)}/permissions`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ permissionCodes }),
+    }),
+
+  updateRole: (userId: string, roleName: string, body: { displayName?: string; description?: string }) =>
+    request<RoleDefinition>(`/roles/${encodeURIComponent(roleName)}`, userId, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  createRole: (userId: string, name: string, description: string, permissionCodes: string[]) =>
+    request<RoleDefinition>("/roles", userId, {
+      method: "POST",
+      body: JSON.stringify({ name, description, permissionCodes }),
+    }),
+
+  deleteRole: (userId: string, roleName: string) =>
+    request<void>(`/roles/${encodeURIComponent(roleName)}`, userId, { method: "DELETE" }),
+
+  // Events & stats
+  listEvents: (userId: string, ticketId: string) =>
+    request<ServerTicketEvent[]>(`/tickets/${ticketId}/events`, userId),
+
+  getResolutionStats: (userId: string, query?: { fromDate?: string; toDate?: string; departmentIds?: string[] }) =>
+    request<ResolutionStats>(`/tickets/resolution-stats${buildQuery({
+      fromDate: query?.fromDate,
+      toDate: query?.toDate,
+      departmentIds: query?.departmentIds?.join(","),
+    })}`, userId),
+
+  // Comments
+  listComments: (userId: string, ticketId: string) =>
+    request<ServerComment[]>(`/tickets/${ticketId}/comments`, userId),
+
+  createComment: (userId: string, ticketId: string, body: string) =>
+    request<ServerComment>(`/tickets/${ticketId}/comments`, userId, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+
+  // Catalog
+  getCatalog: (userId: string) =>
+    request<ServerDepartment[]>("/catalog", userId),
+
+  updateDepartment: (userId: string, id: string, body: { name?: string; description?: string | null }) =>
+    request<ServerDepartment>(`/catalog/departments/${id}`, userId, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  updateCategory: (userId: string, id: string, body: { name?: string; description?: string | null }) =>
+    request<ServerCategory>(`/catalog/categories/${id}`, userId, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

@@ -13,6 +13,7 @@ import {
 import type { DepartmentId } from "../types/types";
 import type { RootState } from "./store";
 import type { AppUser } from "./authSlice";
+import { loginAsync } from "./authSlice";
 
 const BOOTSTRAP_USER_ID = "100001";
 
@@ -22,7 +23,10 @@ function adapt(u: ServerUser): AppUser {
     name: u.name,
     email: u.email,
     role: u.role,
+    status: u.status,
+    lastAccess: u.lastAccess,
     departments: u.departments,
+    permissions: [],
   };
 }
 
@@ -40,7 +44,10 @@ export const fetchUsers = createAsyncThunk<
   const userId = getState().auth.currentUser?.id ?? BOOTSTRAP_USER_ID;
   try {
     const users = await api.listUsers(userId);
-    return users.map(adapt);
+    const isLocalhost = window.location.hostname === "localhost";
+    return users
+      .filter((u) => isLocalhost || u.id !== "dev-tester")
+      .map(adapt);
   } catch (e) {
     return rejectWithValue(e instanceof ApiError ? e.message : "Network error");
   }
@@ -125,7 +132,7 @@ const usersSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchUsers.pending, (state) => {
-        state.status = "loading";
+        if (state.status === "idle") state.status = "loading";
         state.error = null;
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
@@ -157,6 +164,13 @@ const usersSlice = createSlice({
       })
       .addCase(deleteUserAsync.rejected, (state, action) => {
         state.mutationError = action.payload ?? "Error al eliminar usuario";
+      })
+      .addCase(loginAsync.fulfilled, (state, action) => {
+        const idx = state.list.findIndex((u) => u.id === action.payload.id);
+        if (idx >= 0) {
+          state.list[idx].status = action.payload.status;
+          state.list[idx].lastAccess = action.payload.lastAccess;
+        }
       });
   },
 });

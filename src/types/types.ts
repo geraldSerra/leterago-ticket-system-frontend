@@ -57,6 +57,27 @@ export type TicketPayload = {
   createdAt: string;
 };
 
+// ─── Ticket Event ─────────────────────────────────────────────────────────────
+export type TicketEventType =
+  | "created"
+  | "status_changed"
+  | "assigned"
+  | "unassigned"
+  | "priority_changed"
+  | "title_changed"
+  | "payload_updated";
+
+export type TicketEvent = {
+  id: string;
+  ticketId: string;
+  userId: string;
+  user: { id: string; name: string };
+  type: TicketEventType;
+  from: string | null;
+  to: string | null;
+  createdAt: string;
+};
+
 // Legacy aliases so old imports don't break during transition
 export type Department = DepartmentId;
 export type TicketType = CategoryId;

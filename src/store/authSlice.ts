@@ -10,6 +10,9 @@ export interface AppUser {
   email?: string;
   role: UserRole;
   departments: Array<{ departmentId: DepartmentId; role: "admin" | "participant" | "requester" }>;
+  permissions: string[];
+  status: "active" | "inactive" | "pending";
+  lastAccess: string | null;
 }
 
 const STORAGE_KEY = "mesa_auth_user";

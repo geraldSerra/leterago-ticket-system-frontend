@@ -11,6 +11,9 @@ import SolicitudCompraForm, {
 import SolicitudBancosForm, {
   defaultValue as bancosDefault,
 } from "./SolicitudBancosForm";
+import SolicitudMantenimientoForm, {
+  defaultValue as mantenimientoDefault,
+} from "./SolicitudMantenimientoForm";
 
 // To register a category-specific form:
 //   1. Create ./<CategoryName>Form.tsx exporting the component (default) and `defaultValue`.
@@ -38,6 +41,11 @@ export const FORM_REGISTRY: Partial<Record<CategoryId, RegistryEntry>> = {
     Component: SolicitudBancosForm as ComponentType<CategoryFormProps<unknown>>,
     defaultValue: bancosDefault,
     required: false,
+  },
+  "solicitud-mantenimiento": {
+    Component: SolicitudMantenimientoForm as ComponentType<CategoryFormProps<unknown>>,
+    defaultValue: mantenimientoDefault,
+    required: true,
   },
 };
 

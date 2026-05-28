@@ -1,4 +1,4 @@
-import { Bell, LogOut, Crown, ChevronDown } from "lucide-react";
+import { Bell, LogOut, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useRef, useState, useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -40,7 +40,7 @@ const NavBar = () => {
   const allUsers    = useAppSelector((s) => s.users.list);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const isDev = import.meta.env.DEV;
+  const isDev = window.location.hostname === "localhost";
 
   useEffect(() => {
     if (!open) return;
@@ -85,8 +85,7 @@ const NavBar = () => {
           <div className="text-left hidden sm:block">
             <p className="text-sm font-semibold text-gray-800 leading-tight">{currentUser.name}</p>
             {currentUser.role === "master" && (
-              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 bg-indigo-600 text-white">
-                <Crown size={11} />
+              <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 bg-indigo-600 text-white">
                 Master
               </span>
             )}

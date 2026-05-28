@@ -4,4 +4,6 @@ export interface CategoryFormProps<T = unknown> {
   onChange: (next: T) => void;
   /** When true, the form renders as a read-only viewer of `value`. */
   readOnly?: boolean;
+  /** When true, post-creation sections (e.g. execution log) are rendered. */
+  showExecSection?: boolean;
 }

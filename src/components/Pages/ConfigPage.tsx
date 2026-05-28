@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
-  Plus, Pencil, Trash2, X, Crown, Shield, Users, User, Settings,
+  Plus, Pencil, Trash2, X, Shield, Users, User, Settings,
+  ShieldCheck, ChevronRight, Check, Loader2, AlertCircle, Building2,
+  UserX, UserCheck, Clock, Search, ChevronDown,
 } from "lucide-react";
 import PageHeader from "../Molecules/PageHeader";
 import { useAppDispatch, useAppSelector, useCurrentUser } from "../../store/hooks";
 import {
+  fetchUsers,
   createUserAsync,
   updateUserAsync,
   deleteUserAsync,
@@ -14,12 +18,90 @@ import type { AppUser, UserRole } from "../../store/authSlice";
 import { DEPARTMENTS } from "../../config/catalog";
 import type { DepartmentId } from "../../types/types";
 import { getInitials } from "../../lib/initials";
+import { api, ApiError } from "../../api/client";
+import type { RoleDefinition, PermissionsByModule, PermissionEntry, ServerDepartment, ServerCategory } from "../../api/client";
 
-const ROLE_OPTIONS: { value: UserRole; label: string; icon: typeof Crown; bg: string; description: string }[] = [
-  { value: "master",      label: "Máster",       icon: Crown,  bg: "bg-indigo-600",  description: "Acceso total + configuración" },
-  { value: "admin",       label: "Admin",         icon: Shield, bg: "bg-[#0047AC]",  description: "Asigna y confirma en sus dptos" },
+// ─── Tab navigation ───────────────────────────────────────────────────────────
+
+type Tab = "usuarios" | "roles" | "departamentos";
+
+export default function ConfigPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("usuarios");
+  const [newUserTick, setNewUserTick] = useState(0);
+
+  return (
+    <div className="flex flex-col w-full min-h-screen p-6 gap-5 max-w-screen-2xl mx-auto">
+      <div className="flex justify-between items-start gap-4 flex-wrap">
+        <PageHeader
+          title="Configuración"
+          description="Gestión de usuarios, roles y permisos del sistema."
+        />
+        {activeTab === "usuarios" && (
+          <button
+            onClick={() => setNewUserTick((t) => t + 1)}
+            className="flex items-center gap-2 bg-[#0047AC] text-white text-sm px-4 py-2.5 rounded-md font-semibold hover:bg-blue-700 transition-colors shrink-0"
+          >
+            <Plus size={15} />
+            Nuevo Usuario
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <TabButton active={activeTab === "usuarios"} onClick={() => setActiveTab("usuarios")}>
+          <User size={14} />
+          Usuarios
+        </TabButton>
+        <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")}>
+          <ShieldCheck size={14} />
+          Roles y Permisos
+        </TabButton>
+        <TabButton active={activeTab === "departamentos"} onClick={() => setActiveTab("departamentos")}>
+          <Building2 size={14} />
+          Departamentos
+        </TabButton>
+      </div>
+
+      {activeTab === "usuarios"      && <UsersTab newUserTick={newUserTick} />}
+      {activeTab === "roles"         && <RolesTab />}
+      {activeTab === "departamentos" && <DepartamentosTab />}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+        active
+          ? "border-[#0047AC] text-[#0047AC]"
+          : "border-transparent text-gray-500 hover:text-gray-700"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB 1: Usuarios (existing user management, extracted as component)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ROLE_OPTIONS: { value: UserRole; label: string; icon: typeof Shield; bg: string; description: string }[] = [
+  { value: "master",      label: "Máster",       icon: Shield, bg: "bg-indigo-600",   description: "Acceso total + configuración" },
+  { value: "admin",       label: "Admin",         icon: Shield, bg: "bg-[#0047AC]",   description: "Asigna y confirma en sus dptos" },
   { value: "participant", label: "Participante",  icon: Users,  bg: "bg-emerald-500", description: "Ve y resuelve tickets de su dpto" },
-  { value: "requester",   label: "Solicitante",   icon: User,   bg: "bg-slate-400",  description: "Crea y ve sus propios tickets" },
+  { value: "requester",   label: "Solicitante",   icon: User,   bg: "bg-slate-400",   description: "Crea y ve sus propios tickets" },
 ];
 
 const DEPARTMENT_LIST: DepartmentId[] = [
@@ -28,7 +110,51 @@ const DEPARTMENT_LIST: DepartmentId[] = [
   "mantenimiento-seguridad",
 ];
 
-export default function ConfigPage() {
+// ─── Status helpers ───────────────────────────────────────────────────────────
+
+type UserStatus = "active" | "inactive";
+
+function StatusBadge({ status, lastAccess }: { status: string; lastAccess?: string | null }) {
+  if (status === "inactive") {
+    return (
+      <div className="inline-flex items-center gap-1 text-[12px] border h-7 px-3 py-1 bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20 rounded-full font-normal">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" /> Inactivo
+      </div>
+    );
+  }
+  if (status === "active" && !lastAccess) {
+    return (
+      <div className="inline-flex items-center gap-1 text-[12px] border h-7 px-3 py-1 bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 rounded-full font-normal">
+        <Clock size={14} /> Pendiente
+      </div>
+    );
+  }
+  return (
+    <div className="inline-flex items-center gap-1 text-[12px] border h-7 px-3 py-1 bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20 rounded-full font-normal">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> Activo
+    </div>
+  );
+}
+
+function formatLastAccess(iso: string | null | undefined): { text: string; title: string } {
+  if (!iso) return { text: "Nunca", title: "Sin acceso registrado" };
+  const date = new Date(iso);
+  const diff = Date.now() - date.getTime();
+  const mins  = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days  = Math.floor(diff / 86_400_000);
+  let text: string;
+  if (mins  < 1)  text = "Justo ahora";
+  else if (mins  < 60) text = `Hace ${mins}m`;
+  else if (hours < 24) text = `Hace ${hours}h`;
+  else if (days  < 30) text = `Hace ${days}d`;
+  else text = date.toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" });
+  return { text, title: date.toLocaleString("es") };
+}
+
+// ─── UsersTab ─────────────────────────────────────────────────────────────────
+
+function UsersTab({ newUserTick = 0 }: { newUserTick?: number }) {
   const dispatch = useAppDispatch();
   const currentUser = useCurrentUser();
   const users = useAppSelector((s) => s.users.list);
@@ -36,18 +162,50 @@ export default function ConfigPage() {
 
   const [editing, setEditing] = useState<AppUser | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AppUser | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<{ id: string; top: number; right: number } | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [deptFilter, setDeptFilter] = useState("all");
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      if (statusFilter === "active"   && !(u.status === "active"   && u.lastAccess !== null)) return false;
+      if (statusFilter === "pending"  && !(u.status === "active"   && u.lastAccess === null)) return false;
+      if (statusFilter === "inactive" && u.status !== "inactive") return false;
+      if (deptFilter !== "all" && !u.departments.some((d) => d.departmentId === deptFilter)) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [users, search, statusFilter, deptFilter]);
 
   useEffect(() => {
-    return () => {
-      dispatch(clearUsersMutationError());
-    };
+    dispatch(fetchUsers());
   }, [dispatch]);
 
   useEffect(() => {
-    const handler = () => setOpenMenuId(null);
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    return () => { dispatch(clearUsersMutationError()); };
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (newUserTick === 0) return;
+    dispatch(clearUsersMutationError());
+    setEditing("new");
+  }, [newUserTick]);
+
+  useEffect(() => {
+    const close = () => setOpenMenu(null);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, []);
 
   const handleDelete = async (user: AppUser) => {
@@ -55,142 +213,151 @@ export default function ConfigPage() {
     setConfirmDelete(null);
   };
 
-  return (
-    <div className="flex flex-col w-full min-h-screen p-6 gap-5 max-w-screen-2xl mx-auto">
-      <div className="flex justify-between items-start gap-4 flex-wrap">
-        <PageHeader
-          indicator="Administración"
-          title="Gestión de Usuarios"
-          description="Crear, asignar roles y departamentos a los usuarios del sistema."
-        />
-        <button
-          onClick={() => {
-            dispatch(clearUsersMutationError());
-            setEditing("new");
-          }}
-          className="flex items-center gap-2 bg-[#0047AC] text-white text-sm px-4 py-2.5 rounded-md cursor-pointer font-semibold hover:bg-blue-700 transition-colors "
-        >
-          <Plus size={15} />
-          Nuevo Usuario
-        </button>
-      </div>
+  const handleStatusToggle = (u: AppUser) => {
+    if (u.status === "inactive" && u.lastAccess === null) return;
+    const newStatus: UserStatus = u.status === "inactive" ? "active" : "inactive";
+    dispatch(updateUserAsync({ id: u.id, changes: { status: newStatus } }));
+  };
 
+  return (
+    <>
       {mutationError && (
         <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700 flex justify-between items-start">
           <div>
             <strong className="block text-xs uppercase tracking-wider mb-1">Error</strong>
             {mutationError}
           </div>
-          <button
-            onClick={() => dispatch(clearUsersMutationError())}
-            className="p-1 rounded hover:bg-red-100"
-          >
+          <button onClick={() => dispatch(clearUsersMutationError())} className="p-1 rounded hover:bg-red-100">
             <X size={14} />
           </button>
         </div>
       )}
 
-      <div className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden ">
+      <div className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-3 p-4 border-b border-gray-100">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o email..."
+              className="w-full rounded-md border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-[#0047AC] transition-all"
+            />
+          </div>
+          <FilterSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            label="Estado"
+            className="w-40"
+            options={[
+              { value: "all",      label: "Todos" },
+              { value: "active",   label: "Activo" },
+              { value: "pending",  label: "Pendiente" },
+              { value: "inactive", label: "Inactivo" },
+            ]}
+          />
+          <FilterSelect
+            value={deptFilter}
+            onChange={setDeptFilter}
+            label="Departamento"
+            className="w-56"
+            options={[
+              { value: "all", label: "Todos" },
+              ...DEPARTMENT_LIST.map((d) => ({ value: d, label: DEPARTMENTS[d].label })),
+            ]}
+          />
+          {(search || statusFilter !== "all" || deptFilter !== "all") && (
+            <button
+              onClick={() => { setSearch(""); setStatusFilter("all"); setDeptFilter("all"); }}
+              className="text-xs text-[#0047AC] font-semibold hover:underline whitespace-nowrap"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <Th>Usuario</Th>
                 <Th>Email</Th>
-                <Th>Rol</Th>
+                <Th>Estado</Th>
                 <Th>Departamentos</Th>
+                <Th>Último acceso</Th>
                 <Th></Th>
               </tr>
             </thead>
             <tbody>
-              {users.length === 0 && (
+              {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-16 text-gray-400 text-sm">
-                    No hay usuarios registrados.
+                  <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
+                    {users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con los filtros aplicados."}
                   </td>
                 </tr>
               )}
-              {users.map((u) => {
-                const role = ROLE_OPTIONS.find((r) => r.value === u.role);
-                const isSelf = u.id === currentUser.id;
+              {filteredUsers.map((u) => {
+                const roleOpt = ROLE_OPTIONS.find((r) => r.value === u.role);
+                const isSelf  = u.id === currentUser.id;
+                const la      = formatLastAccess(u.lastAccess);
                 return (
                   <tr key={u.id} className="border-b border-gray-50 hover:bg-blue-50/40 transition-colors">
+
+                    {/* Usuario */}
                     <Td>
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full ${role?.bg ?? "bg-gray-400"} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
+                        <div className={`w-9 h-9 rounded-full ${roleOpt?.bg ?? "bg-gray-400"} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
                           {getInitials(u.name)}
                         </div>
-                        <p className="font-semibold text-gray-900">{u.name}</p>
+                        <p className="font-semibold text-gray-900 whitespace-nowrap">{u.name}</p>
                       </div>
                     </Td>
-                    <Td>
-                      <span className="text-xs text-gray-500">{u.email ?? "—"}</span>
-                    </Td>
-                    <Td>
-                      {u.role === "master" && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-sm bg-indigo-600 text-white">
-                          <Crown size={11} />
-                          Master
-                        </span>
-                      )}
-                    </Td>
+
+                    {/* Email */}
+                    <Td><span className="text-xs text-gray-500">{u.email ?? "—"}</span></Td>
+
+                    {/* Estado */}
+                    <Td><StatusBadge status={u.status} lastAccess={u.lastAccess} /></Td>
+
+                    {/* Departamentos */}
                     <Td>
                       {u.departments.length === 0 ? (
                         <span className="text-gray-400 italic text-xs">Sin departamentos</span>
                       ) : (
                         <div className="flex gap-1 flex-wrap">
                           {u.departments.map((d) => (
-                            <span key={d.departmentId} className="inline-flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">
+                            <span key={d.departmentId} className="inline-flex items-center text-[11px] border px-2 py-1 bg-white text-[#0047AC] border-[#0047AC]/30 rounded-md font-normal">
                               {DEPARTMENTS[d.departmentId as DepartmentId]?.label ?? d.departmentId}
-                              {u.role !== "master" && (
-                                <span className={`text-[9px] font-bold px-1 rounded-sm text-white ${
-                                  d.role === "admin" ? "bg-[#0047AC]" : d.role === "participant" ? "bg-emerald-500" : "bg-slate-400"
-                                }`}>
-                                  {d.role === "admin" ? "A" : d.role === "participant" ? "P" : "S"}
-                                </span>
-                              )}
                             </span>
                           ))}
                         </div>
                       )}
                     </Td>
+
+                    {/* Último acceso */}
                     <Td>
-                      <div
-                        className="relative flex justify-end"
-                        onMouseDown={(e) => e.stopPropagation()}
+                      <span
+                        title={la.title}
+                        className={`text-xs whitespace-nowrap ${la.text === "Nunca" ? "text-gray-300 italic" : "text-gray-500"}`}
                       >
+                        {la.text}
+                      </span>
+                    </Td>
+
+                    {/* Acciones */}
+                    <Td>
+                      <div className="flex justify-end">
                         <button
-                          onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                          onClick={(e) => {
+                            if (openMenu?.id === u.id) { setOpenMenu(null); return; }
+                            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                            setOpenMenu({ id: u.id, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                          }}
                           className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                          title="Opciones"
                         >
                           <Settings size={14} />
                         </button>
-                        {openMenuId === u.id && (
-                          <div className="absolute right-0 top-[calc(100%+4px)] z-50 bg-white border border-gray-200 rounded-md shadow-sm min-w-36 overflow-hidden">
-                            <button
-                              onClick={() => {
-                                dispatch(clearUsersMutationError());
-                                setEditing(u);
-                                setOpenMenuId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
-                            >
-                              <Pencil size={13} />
-                              Editar
-                            </button>
-                            <div className="border-t border-gray-100" />
-                            <button
-                              onClick={() => { setConfirmDelete(u); setOpenMenuId(null); }}
-                              disabled={isSelf}
-                              title={isSelf ? "No puedes eliminar tu propia cuenta" : ""}
-                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              <Trash2 size={13} />
-                              Eliminar
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </Td>
                   </tr>
@@ -200,6 +367,49 @@ export default function ConfigPage() {
           </table>
         </div>
       </div>
+
+      {openMenu && (() => {
+        const mu = users.find((u) => u.id === openMenu.id);
+        if (!mu) return null;
+        const isMeSelf = mu.id === currentUser.id;
+        const canActivate = mu.status === "inactive" && mu.lastAccess !== null;
+        const canDeactivate = mu.status === "active";
+        const noAction = !canActivate && !canDeactivate;
+        return createPortal(
+          <div
+            className="fixed z-[9999] bg-white border border-gray-200 rounded-md shadow-sm min-w-40 overflow-hidden"
+            style={{ top: openMenu.top, right: openMenu.right }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { dispatch(clearUsersMutationError()); setEditing(mu); setOpenMenu(null); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+            >
+              <Pencil size={13} />Editar
+            </button>
+            <div className="border-t border-gray-100" />
+            <button
+              onClick={() => { handleStatusToggle(mu); setOpenMenu(null); }}
+              disabled={isMeSelf || noAction}
+              title={mu.lastAccess === null && mu.status !== "active" ? "El usuario debe iniciar sesión antes de poder activarse" : undefined}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
+                canActivate ? "text-emerald-600 hover:bg-emerald-50" : "text-orange-500 hover:bg-orange-50"
+              }`}
+            >
+              {canActivate ? <><UserCheck size={13} />Activar</> : <><UserX size={13} />Desactivar</>}
+            </button>
+            <div className="border-t border-gray-100" />
+            <button
+              onClick={() => { setConfirmDelete(mu); setOpenMenu(null); }}
+              disabled={isMeSelf}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 text-left disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={13} />Eliminar
+            </button>
+          </div>,
+          document.body
+        );
+      })()}
 
       {editing && (
         <UserFormModal
@@ -212,9 +422,7 @@ export default function ConfigPage() {
               const result = await dispatch(createUserAsync({ ...body, password: body.password! }));
               if (createUserAsync.fulfilled.match(result)) setEditing(null);
             } else {
-              const result = await dispatch(
-                updateUserAsync({ id: editing.id, changes: body }),
-              );
+              const result = await dispatch(updateUserAsync({ id: editing.id, changes: body }));
               if (updateUserAsync.fulfilled.match(result)) setEditing(null);
             }
           }}
@@ -228,22 +436,597 @@ export default function ConfigPage() {
           onConfirm={() => handleDelete(confirmDelete)}
         />
       )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB 2: Roles y Permisos
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ROLE_LABELS: Record<string, string> = {
+  master:      "Máster",
+  admin:       "Admin",
+  participant: "Participante",
+  requester:   "Solicitante",
+};
+
+function roleLabel(role: { name: string; displayName?: string | null }): string {
+  if (role.displayName) return role.displayName;
+  return ROLE_LABELS[role.name] ?? role.name.charAt(0).toUpperCase() + role.name.slice(1);
+}
+
+const MODULE_LABELS: Record<string, string> = {
+  tickets: "Tickets",
+  users:   "Usuarios",
+  admin:   "Roles",
+};
+
+
+function RolesTab() {
+  const currentUser = useCurrentUser();
+
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
+  const [permsByModule, setPermsByModule] = useState<PermissionsByModule>({});
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [draftPerms, setDraftPerms] = useState<Set<string>>(new Set());
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [editingRole, setEditingRole] = useState<RoleDefinition | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RoleDefinition | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.getRoles(currentUser.id),
+      api.getAllPermissions(currentUser.id),
+    ])
+      .then(([rolesData, permsData]) => {
+        setRoles(rolesData);
+        setPermsByModule(permsData);
+        if (rolesData.length > 0) setSelectedRole(rolesData[0].name);
+      })
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : "Error al cargar roles"));
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (!selectedRole) return;
+    const role = roles.find((r) => r.name === selectedRole);
+    if (role) {
+      setDraftPerms(new Set(role.permissions));
+      setDirty(false);
+      setSaveError(null);
+    }
+  }, [selectedRole, roles]);
+
+  const togglePerm = (code: string) => {
+    setDraftPerms((prev) => {
+      const next = new Set(prev);
+      next.has(code) ? next.delete(code) : next.add(code);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const savePermissions = async () => {
+    if (!selectedRole) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const updated = await api.updateRolePermissions(currentUser.id, selectedRole, [...draftPerms]);
+      setRoles((prev) => prev.map((r) => (r.name === selectedRole ? updated : r)));
+      setDirty(false);
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRoleCreated = (newRole: RoleDefinition) => {
+    setRoles((prev) => [...prev, newRole]);
+    setSelectedRole(newRole.name);
+    setCreatingRole(false);
+  };
+
+  const handleRoleUpdated = (updated: RoleDefinition) => {
+    setRoles((prev) => prev.map((r) => (r.name === updated.name ? updated : r)));
+    setEditingRole(null);
+  };
+
+  const handleRoleDeleted = async (role: RoleDefinition) => {
+    try {
+      await api.deleteRole(currentUser.id, role.name);
+      const updated = roles.filter((r) => r.name !== role.name);
+      setRoles(updated);
+      if (selectedRole === role.name) setSelectedRole(updated[0]?.name ?? null);
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : "Error al eliminar rol");
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  const activeRole = roles.find((r) => r.name === selectedRole) ?? null;
+  const allPerms = Object.values(permsByModule).flat();
+
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-2 text-red-600 text-sm p-4 bg-red-50 border border-red-200 rounded-lg">
+        <AlertCircle size={15} />
+        {loadError}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-5 min-h-0 flex-1">
+      {/* ── Left panel: role list ── */}
+      <div className="w-64 shrink-0 flex flex-col gap-2">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Roles</p>
+          <button
+            onClick={() => setCreatingRole(true)}
+            className="flex items-center gap-1 text-[11px] font-semibold text-[#0047AC] hover:text-blue-700"
+          >
+            <Plus size={12} />
+            Nuevo
+          </button>
+        </div>
+
+        {roles.map((role) => (
+          <button
+            key={role.name}
+            onClick={() => { if (dirty) { if (!confirm("Tienes cambios sin guardar. ¿Descartar?")) return; } setSelectedRole(role.name); }}
+            className={`w-full text-left flex items-center justify-between px-3.5 py-3 rounded-lg border text-sm transition-colors ${
+              selectedRole === role.name
+                ? "bg-[#0047AC] border-[#0047AC] text-white"
+                : "bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-semibold truncate">{roleLabel(role)}</span>
+              {role.isSystem && (
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${selectedRole === role.name ? "text-blue-200" : "text-gray-400"}`}>
+                  sistema
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className={`text-[10px] font-semibold ${selectedRole === role.name ? "text-blue-200" : "text-gray-400"}`}>
+                {role.permissions.length}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditingRole(role); }}
+                title="Editar nombre y descripción"
+                className={`p-0.5 rounded transition-colors ${
+                  selectedRole === role.name
+                    ? "text-blue-200 hover:text-white hover:bg-blue-700"
+                    : "text-gray-300 hover:text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <Pencil size={11} />
+              </button>
+              {!role.isSystem && selectedRole !== role.name && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(role); }}
+                  className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+              {selectedRole === role.name && <ChevronRight size={14} className="text-blue-200" />}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Right panel: permission editor ── */}
+      <div className="flex-1 flex flex-col gap-4 min-w-0">
+        {!activeRole ? (
+          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
+            Selecciona un rol para editar sus permisos
+          </div>
+        ) : (
+          <>
+            {/* Role header */}
+            <div className="flex items-start justify-between gap-4 bg-white border border-gray-200 rounded-lg px-5 py-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-gray-900">{roleLabel(activeRole)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{activeRole.description}</p>
+                </div>
+                <button
+                  onClick={() => setEditingRole(activeRole)}
+                  title="Editar nombre y descripción"
+                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0 mt-0.5"
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {saveError && (
+                  <span className="text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle size={12} />{saveError}
+                  </span>
+                )}
+                {dirty && (
+                  <button
+                    onClick={() => {
+                      setDraftPerms(new Set(activeRole.permissions));
+                      setDirty(false);
+                      setSaveError(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50"
+                  >
+                    Descartar
+                  </button>
+                )}
+                <button
+                  onClick={savePermissions}
+                  disabled={!dirty || saving}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded bg-[#0047AC] text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  Guardar
+                </button>
+              </div>
+            </div>
+
+            {/* Permission modules */}
+            <div className="flex flex-col gap-3">
+              {Object.entries(permsByModule).map(([module, perms]) => {
+                const codes = perms.map((p) => p.code);
+                const checkedCount = codes.filter((c) => draftPerms.has(c)).length;
+                const allChecked = checkedCount === codes.length;
+                const partial = checkedCount > 0 && !allChecked;
+                const label = MODULE_LABELS[module] ?? module.charAt(0).toUpperCase() + module.slice(1);
+
+                return (
+                  <div key={module} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    {/* Module header */}
+                    <div className={`flex items-center gap-3 px-4 py-3 border-b ${checkedCount > 0 ? "bg-[#0047AC] border-[#0047AC] text-white" : "bg-gray-50 border-gray-100"}`}>
+                      <Checkbox checked={allChecked} partial={partial} />
+                      <span className="text-xs font-bold uppercase tracking-wider">
+                        {label}
+                      </span>
+                      <span className={`text-xs ml-auto ${checkedCount > 0 ? "text-blue-200" : "text-gray-400"}`}>
+                        {checkedCount}/{codes.length}
+                      </span>
+                    </div>
+
+                    {/* Permission rows */}
+                    <div>
+                      {perms.map((perm, i) => (
+                        <PermissionRow
+                          key={perm.code}
+                          perm={perm}
+                          checked={draftPerms.has(perm.code)}
+                          onToggle={() => togglePerm(perm.code)}
+                          last={i === perms.length - 1}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="text-xs text-gray-400 text-right">
+              {draftPerms.size} de {allPerms.length} permisos activos
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* New role modal */}
+      {creatingRole && (
+        <NewRoleModal
+          userId={currentUser.id}
+          onClose={() => setCreatingRole(false)}
+          onCreated={handleRoleCreated}
+        />
+      )}
+
+      {/* Edit role modal */}
+      {editingRole && (
+        <EditRoleModal
+          role={editingRole}
+          userId={currentUser.id}
+          onClose={() => setEditingRole(null)}
+          onUpdated={handleRoleUpdated}
+        />
+      )}
+
+      {/* Delete role confirm */}
+      {deleteTarget && (
+        <DeleteRoleModal
+          role={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => handleRoleDeleted(deleteTarget)}
+        />
+      )}
     </div>
   );
 }
 
-// ─── User form modal ──────────────────────────────────────────────────────────
+// ─── Permission row ────────────────────────────────────────────────────────────
+
+function PermissionRow({
+  perm, checked, onToggle, last,
+}: { perm: PermissionEntry; checked: boolean; onToggle: () => void; last: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-blue-50/40 transition-colors ${
+        !last ? "border-b border-gray-50" : ""
+      }`}
+    >
+      <Checkbox checked={checked} />
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className={`text-sm font-medium ${checked ? "text-gray-900" : "text-gray-500"}`}>
+          {perm.name}
+        </span>
+        <span className="text-xs text-gray-400 truncate">{perm.description}</span>
+      </div>
+      <code className="ml-auto text-[10px] text-gray-300 font-mono shrink-0">{perm.code}</code>
+    </button>
+  );
+}
+
+// ─── Checkbox primitive ────────────────────────────────────────────────────────
+
+function Checkbox({ checked, partial = false }: { checked: boolean; partial?: boolean }) {
+  return (
+    <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+      checked
+        ? "bg-[#0047AC] border-[#0047AC]"
+        : partial
+          ? "bg-blue-100 border-[#0047AC]"
+          : "border-gray-300"
+    }`}>
+      {checked && <Check size={10} className="text-white" strokeWidth={3} />}
+      {partial && !checked && <div className="w-2 h-0.5 bg-[#0047AC] rounded" />}
+    </div>
+  );
+}
+
+// ─── New role modal ────────────────────────────────────────────────────────────
+
+function NewRoleModal({
+  userId,
+  onClose,
+  onCreated,
+}: {
+  userId: string;
+  onClose: () => void;
+  onCreated: (role: RoleDefinition) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (name.trim().length < 2) { setError("El nombre debe tener al menos 2 caracteres"); return; }
+    if (!/^[a-z0-9_-]+$/.test(name.trim())) {
+      setError("Solo minúsculas, números, guiones y underscores");
+      return;
+    }
+    if (!description.trim()) { setError("La descripción es requerida"); return; }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const created = await api.createRole(userId, name.trim(), description.trim(), []);
+      onCreated(created);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Error al crear rol");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-sm max-w-sm w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-gray-900">Nuevo Rol</h3>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Field label="Nombre del rol" hint="Solo minúsculas, números, guiones y underscores" error={error && error.includes("nombre") ? error : undefined}>
+            <input
+              value={name}
+              onChange={(e) => { setName(e.target.value); setError(null); }}
+              placeholder="ej. supervisor"
+              className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100"
+            />
+          </Field>
+          <Field label="Descripción">
+            <input
+              value={description}
+              onChange={(e) => { setDescription(e.target.value); setError(null); }}
+              placeholder="ej. Supervisa tickets de todos los departamentos"
+              className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100"
+            />
+          </Field>
+
+          {error && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <AlertCircle size={12} />{error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Crear Rol
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit role modal ───────────────────────────────────────────────────────────
+
+function EditRoleModal({
+  role,
+  userId,
+  onClose,
+  onUpdated,
+}: {
+  role: RoleDefinition;
+  userId: string;
+  onClose: () => void;
+  onUpdated: (updated: RoleDefinition) => void;
+}) {
+  const [displayName, setDisplayName] = useState(role.displayName ?? "");
+  const [description, setDescription] = useState(role.description);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!description.trim()) { setError("La descripción es requerida"); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      const updated = await api.updateRole(userId, role.name, {
+        displayName: displayName.trim() || undefined,
+        description: description.trim(),
+      });
+      onUpdated(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Error al guardar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-sm max-w-sm w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Editar rol</h3>
+            <code className="text-[10px] text-gray-400 font-mono">{role.name}</code>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Field label="Título" hint="Nombre visible en la interfaz. Dejar vacío para usar el nombre del rol.">
+            <input
+              value={displayName}
+              onChange={(e) => { setDisplayName(e.target.value); setError(null); }}
+              placeholder={role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100"
+            />
+          </Field>
+          <Field label="Descripción" error={error?.includes("escripción") ? error : undefined}>
+            <textarea
+              value={description}
+              onChange={(e) => { setDescription(e.target.value); setError(null); }}
+              rows={3}
+              className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 resize-none"
+            />
+          </Field>
+
+          {error && !error.includes("escripción") && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <AlertCircle size={12} />{error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Delete role confirm modal ─────────────────────────────────────────────────
+
+function DeleteRoleModal({
+  role,
+  onCancel,
+  onConfirm,
+}: { role: RoleDefinition; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-sm max-w-sm w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-gray-900">¿Eliminar rol?</h3>
+          <button onClick={onCancel} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 mb-6">
+          Se eliminará el rol <strong className="text-gray-800">{roleLabel(role)}</strong>.
+          Los usuarios que lo tengan asignado quedarán sin permisos hasta que se les asigne otro rol.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className="flex-1 bg-red-500 text-white py-2.5 rounded-md text-sm font-semibold hover:bg-red-600">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User form modal (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
 
 type DeptEntry = { departmentId: DepartmentId; role: "admin" | "participant" | "requester" };
 
 const DEPT_ROLE_OPTIONS: { value: DeptEntry["role"]; label: string; activeClass: string }[] = [
-  { value: "admin",       label: "Admin",        activeClass: "bg-[#0047AC] border-[#0047AC] text-white" },
-  { value: "participant", label: "Participante",  activeClass: "bg-emerald-500 border-emerald-500 text-white" },
+  { value: "admin",       label: "Admin",       activeClass: "bg-[#0047AC] border-[#0047AC] text-white" },
+  { value: "participant", label: "Participante", activeClass: "bg-emerald-500 border-emerald-500 text-white" },
   { value: "requester",   label: "Solicitante",  activeClass: "bg-slate-500 border-slate-500 text-white" },
 ];
 
-const ROLE_INFO: Record<UserRole, { label: string; description: string; Icon: typeof Crown; color: string }> = {
-  master:      { label: "Máster",       description: "Acceso total + configuración del sistema",           Icon: Crown,  color: "text-indigo-600" },
+const ROLE_INFO: Record<UserRole, { label: string; description: string; Icon: typeof Shield; color: string }> = {
+  master:      { label: "Máster",       description: "Acceso total + configuración del sistema",           Icon: Shield, color: "text-indigo-600" },
   admin:       { label: "Admin",        description: "Asigna y confirma tickets en sus departamentos",     Icon: Shield, color: "text-[#0047AC]" },
   participant: { label: "Participante", description: "Ve y resuelve tickets de sus departamentos",          Icon: Users,  color: "text-emerald-600" },
   requester:   { label: "Solicitante",  description: "Crea y ve únicamente sus propios tickets",           Icon: User,   color: "text-slate-500" },
@@ -256,23 +1039,13 @@ function deriveRole(depts: DeptEntry[]): UserRole {
 }
 
 function UserFormModal({
-  mode,
-  initial,
-  isSelf,
-  onClose,
-  onSubmit,
+  mode, initial, isSelf, onClose, onSubmit,
 }: {
   mode: "create" | "edit";
   initial: AppUser | null;
   isSelf: boolean;
   onClose: () => void;
-  onSubmit: (body: {
-    name: string;
-    email: string;
-    password?: string;
-    role: UserRole;
-    departments: DeptEntry[];
-  }) => void;
+  onSubmit: (body: { name: string; email: string; password?: string; role: UserRole; departments: DeptEntry[] }) => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
@@ -289,24 +1062,18 @@ function UserFormModal({
   const derivedRole: UserRole = isMaster ? "master" : deriveRole(departments);
   const roleInfo = ROLE_INFO[derivedRole];
 
-  const isDeptChecked = (d: DepartmentId) =>
-    departments.some((x) => x.departmentId === d);
-
+  const isDeptChecked = (d: DepartmentId) => departments.some((x) => x.departmentId === d);
   const getDeptRole = (d: DepartmentId): DeptEntry["role"] =>
     departments.find((x) => x.departmentId === d)?.role ?? "participant";
 
   const toggleDept = (d: DepartmentId) => {
     setDepartments((prev) =>
-      isDeptChecked(d)
-        ? prev.filter((x) => x.departmentId !== d)
-        : [...prev, { departmentId: d, role: "participant" }],
+      isDeptChecked(d) ? prev.filter((x) => x.departmentId !== d) : [...prev, { departmentId: d, role: "participant" }],
     );
   };
 
   const setDeptRole = (d: DepartmentId, r: DeptEntry["role"]) => {
-    setDepartments((prev) =>
-      prev.map((x) => (x.departmentId === d ? { ...x, role: r } : x)),
-    );
+    setDepartments((prev) => prev.map((x) => (x.departmentId === d ? { ...x, role: r } : x)));
   };
 
   const handleSubmit = () => {
@@ -322,102 +1089,56 @@ function UserFormModal({
     } else if (mode === "edit" && password.length > 0 && password.length < 6) {
       e.password = "Mínimo 6 caracteres";
     }
-    if (Object.keys(e).length > 0) {
-      setErrors(e);
-      return;
-    }
-
-    onSubmit({
-      name: name.trim(),
-      email: email.trim(),
-      password: password.length > 0 ? password : undefined,
-      role: derivedRole,
-      departments,
-    });
+    if (Object.keys(e).length > 0) { setErrors(e); return; }
+    onSubmit({ name: name.trim(), email: email.trim(), password: password.length > 0 ? password : undefined, role: derivedRole, departments });
   };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-sm max-w-xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-sm max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
           <h3 className="text-base font-bold text-gray-900">
             {mode === "create" ? "Nuevo Usuario" : `Editar ${initial?.name}`}
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X size={16} />
-          </button>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><X size={16} /></button>
         </div>
 
         <div className="p-6 flex flex-col gap-4">
-          <Field
-            label="Nombre completo"
-            hint="Avatar = primera letra del primer nombre + primera letra del primer apellido"
-            error={errors.name}
-          >
-            <input
-              value={name}
-              onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
-              placeholder="ej. Diana Reyes"
-              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
-                errors.name ? "border-red-400" : "border-gray-200"
-              }`}
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Nombre completo" hint="Iniciales: primer nombre + primer apellido" error={errors.name}>
+              <input value={name} onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
+                placeholder="ej. Diana Reyes"
+                className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${errors.name ? "border-red-400" : "border-gray-200"}`}
+              />
+            </Field>
 
-          <Field label="Email" error={errors.email}>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
-              placeholder="ej. diana@leterago.com"
-              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
-                errors.email ? "border-red-400" : "border-gray-200"
-              }`}
-            />
-          </Field>
+            <Field label="Email" error={errors.email}>
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
+                placeholder="ej. diana@leterago.com"
+                className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${errors.email ? "border-red-400" : "border-gray-200"}`}
+              />
+            </Field>
+          </div>
 
-          <Field
-            label={mode === "create" ? "Contraseña" : "Nueva contraseña"}
-            hint={mode === "edit" ? "Dejar vacío para no cambiarla" : "Mínimo 6 caracteres"}
-            error={errors.password}
-          >
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
+          <Field label={mode === "create" ? "Contraseña" : "Nueva contraseña"} hint={mode === "edit" ? "Dejar vacío para no cambiarla" : "Mínimo 6 caracteres"} error={errors.password}>
+            <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
               placeholder={mode === "edit" ? "••••••" : ""}
-              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${
-                errors.password ? "border-red-400" : "border-gray-200"
-              }`}
+              className={`w-full bg-gray-50 border rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 ${errors.password ? "border-red-400" : "border-gray-200"}`}
             />
           </Field>
 
-          {/* ── Rol ── */}
           <Field label="Rol" hint={isSelf && isMaster ? "No puedes quitarte el rol Máster a ti mismo" : undefined}>
-            {/* Master toggle */}
-            <button
-              type="button"
-              disabled={isSelf && initial?.role === "master"}
-              onClick={() => setIsMaster((v) => !v)}
-              className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-md border text-sm transition ${
-                isMaster
-                  ? "bg-indigo-50 border-indigo-400"
-                  : "border-gray-200 hover:border-gray-300"
-              } ${isSelf && initial?.role === "master" ? "opacity-60 cursor-not-allowed" : ""}`}
+            <button type="button" disabled={isSelf && initial?.role === "master"} onClick={() => { setIsMaster((v) => { if (!v) setDepartments([]); return !v; }); }}
+              className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-md border text-sm transition ${isMaster ? "bg-indigo-50 border-indigo-400" : "border-gray-200 hover:border-gray-300"} ${isSelf && initial?.role === "master" ? "opacity-60 cursor-not-allowed" : ""}`}
             >
-              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                isMaster ? "bg-indigo-600 border-indigo-600" : "border-gray-400"
-              }`}>
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isMaster ? "bg-indigo-600 border-indigo-600" : "border-gray-400"}`}>
                 {isMaster && <div className="w-2 h-2 bg-white rounded-sm" />}
               </div>
-              <Crown size={13} className={isMaster ? "text-indigo-600" : "text-gray-400"} />
               <div className="flex flex-col items-start">
                 <span className={`text-xs font-semibold ${isMaster ? "text-indigo-600" : "text-gray-600"}`}>Máster</span>
                 <span className="text-[10px] text-gray-400 font-normal">Acceso total + configuración del sistema</span>
               </div>
             </button>
-
-            {/* Derived role display */}
             {!isMaster && (
               <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-md bg-gray-50 border border-gray-200">
                 <roleInfo.Icon size={15} className={roleInfo.color} />
@@ -430,49 +1151,59 @@ function UserFormModal({
             )}
           </Field>
 
-          {/* ── Departamentos ── */}
           <Field label="Departamentos">
-            <div className="flex flex-col gap-2">
+            {isMaster && (
+              <p className="text-xs text-gray-400 italic px-0.5">
+                El rol Máster tiene acceso a todos los departamentos automáticamente.
+              </p>
+            )}
+            <div className={`flex flex-col gap-2 ${isMaster ? "opacity-40 pointer-events-none select-none" : ""}`}>
               {DEPARTMENT_LIST.map((d) => {
                 const checked = isDeptChecked(d);
-                const dRole   = getDeptRole(d);
+                const dRole = getDeptRole(d);
                 return (
-                  <div
-                    key={d}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-md border text-sm transition ${
-                      checked ? "bg-blue-50 border-[#0047AC]" : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
+                  <div key={d} className={`rounded-md border text-sm transition-colors overflow-hidden ${checked ? "border-[#0047AC]" : "border-gray-200"}`}>
+                    {/* Header row */}
                     <button
                       type="button"
                       onClick={() => toggleDept(d)}
-                      className="flex items-center gap-3 flex-1 text-left"
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors ${checked ? "bg-blue-50" : "hover:bg-gray-50"}`}
                     >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                        checked ? "bg-[#0047AC] border-[#0047AC]" : "border-gray-400"
-                      }`}>
-                        {checked && <div className="w-2 h-2 bg-white rounded-sm" />}
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-[#0047AC] border-[#0047AC]" : "border-gray-400"}`}>
+                        {checked && <Check size={10} className="text-white" strokeWidth={2.5} />}
                       </div>
-                      <span className={`font-medium ${checked ? "text-[#0047AC]" : "text-gray-600"}`}>
+                      <span className={`font-medium flex-1 ${checked ? "text-[#0047AC]" : "text-gray-600"}`}>
                         {DEPARTMENTS[d].label}
                       </span>
+                      {checked && (
+                        <span className="text-[10px] text-[#0047AC]/60 font-semibold shrink-0">
+                          {DEPT_ROLE_OPTIONS.find(o => o.value === dRole)?.label}
+                        </span>
+                      )}
+                      <ChevronDown
+                        size={14}
+                        className={`shrink-0 transition-transform duration-200 ${checked ? "text-[#0047AC] rotate-180" : "text-gray-400"}`}
+                      />
                     </button>
+
+                    {/* Role accordion */}
                     {checked && (
-                      <div className="flex gap-1 shrink-0">
-                        {DEPT_ROLE_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setDeptRole(d, opt.value)}
-                            className={`text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${
-                              dRole === opt.value
-                                ? opt.activeClass
-                                : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                      <div className="px-3.5 py-3 border-t border-[#0047AC]/15 bg-blue-50/40">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Rol en este departamento</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {DEPT_ROLE_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setDeptRole(d, opt.value)}
+                              className={`text-[11px] font-semibold px-3 py-1.5 rounded-md border transition-colors ${
+                                dRole === opt.value ? opt.activeClass : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -483,16 +1214,10 @@ function UserFormModal({
         </div>
 
         <div className="flex gap-3 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
-          >
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">
             Cancelar
           </button>
-          <button
-            onClick={handleSubmit}
-            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700"
-          >
+          <button onClick={handleSubmit} className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700">
             {mode === "create" ? "Crear Usuario" : "Guardar Cambios"}
           </button>
         </div>
@@ -501,36 +1226,335 @@ function UserFormModal({
   );
 }
 
-// ─── Delete confirm modal ─────────────────────────────────────────────────────
+// ─── Delete user confirm modal ────────────────────────────────────────────────
 
-function DeleteModal({
-  user, onCancel, onConfirm,
-}: { user: AppUser; onCancel: () => void; onConfirm: () => void }) {
+function DeleteModal({ user, onCancel, onConfirm }: { user: AppUser; onCancel: () => void; onConfirm: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-sm max-w-sm w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-gray-900">¿Eliminar usuario?</h3>
-          <button onClick={onCancel} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X size={16} />
-          </button>
+          <button onClick={onCancel} className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><X size={16} /></button>
         </div>
         <p className="text-sm text-gray-500 mb-6">
           Se eliminará permanentemente a <strong className="text-gray-800">{user.name}</strong>.
           Si tiene tickets asociados, la operación fallará.
         </p>
         <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50"
-          >
+          <button onClick={onCancel} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">Cancelar</button>
+          <button onClick={onConfirm} className="flex-1 bg-red-500 text-white py-2.5 rounded-md text-sm font-semibold hover:bg-red-600">Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB 3: Departamentos
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DepartamentosTab() {
+  const currentUser = useCurrentUser();
+  const [departments, setDepartments] = useState<ServerDepartment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [editingDept, setEditingDept] = useState<ServerDepartment | null>(null);
+  const [editingCat, setEditingCat] = useState<ServerCategory | null>(null);
+
+  useEffect(() => {
+    api.getCatalog(currentUser.id)
+      .then((data) => {
+        setDepartments(data);
+        if (data.length > 0) setExpandedDept(data[0].id);
+      })
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : "Error al cargar"))
+      .finally(() => setLoading(false));
+  }, [currentUser.id]);
+
+  const handleDeptSaved = (updated: ServerDepartment) => {
+    setDepartments((prev) =>
+      prev.map((d) => d.id === updated.id ? { ...updated, categories: d.categories } : d),
+    );
+    setEditingDept(null);
+  };
+
+  const handleCatSaved = (updated: ServerCategory) => {
+    setDepartments((prev) =>
+      prev.map((d) => ({
+        ...d,
+        categories: d.categories.map((c) => (c.id === updated.id ? updated : c)),
+      })),
+    );
+    setEditingCat(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-gray-400 text-sm p-6">
+        <Loader2 size={15} className="animate-spin" />Cargando departamentos...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-2 text-red-600 text-sm p-4 bg-red-50 border border-red-200 rounded-lg">
+        <AlertCircle size={15} />{loadError}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {departments.map((dept) => {
+        const open = expandedDept === dept.id;
+        return (
+          <div key={dept.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            {/* Department header */}
+            <div className="flex items-center gap-3 px-5 py-4">
+              <button
+                onClick={() => setExpandedDept(open ? null : dept.id)}
+                className="flex items-center gap-3 flex-1 text-left min-w-0"
+              >
+                <ChevronRight
+                  size={16}
+                  className={`text-gray-400 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+                />
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm">{dept.name}</p>
+                  {dept.description && (
+                    <p className="text-xs text-gray-400 truncate mt-0.5">{dept.description}</p>
+                  )}
+                </div>
+                <span className="ml-2 text-[10px] text-gray-400 shrink-0">
+                  {dept.categories.length} {dept.categories.length === 1 ? "categoría" : "categorías"}
+                </span>
+              </button>
+              <button
+                onClick={() => setEditingDept(dept)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+                title="Editar departamento"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+
+            {/* Categories */}
+            {open && (
+              <div className="border-t border-gray-100">
+                {dept.categories.length === 0 ? (
+                  <p className="px-5 py-4 text-sm text-gray-400 italic">Sin categorías</p>
+                ) : (
+                  dept.categories.map((cat, i) => (
+                    <div
+                      key={cat.id}
+                      className={`flex items-start gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors ${
+                        i < dept.categories.length - 1 ? "border-b border-gray-50" : ""
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0 pl-7">
+                        <p className="text-sm font-medium text-gray-800">{cat.name}</p>
+                        {cat.description ? (
+                          <p className="text-xs text-gray-400 mt-0.5">{cat.description}</p>
+                        ) : (
+                          <p className="text-xs text-gray-300 mt-0.5 italic">Sin descripción</p>
+                        )}
+                        <code className="text-[10px] text-gray-300 font-mono">{cat.id}</code>
+                      </div>
+                      <button
+                        onClick={() => setEditingCat(cat)}
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0 mt-0.5"
+                        title="Editar categoría"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {editingDept && (
+        <EditDeptModal
+          dept={editingDept}
+          userId={currentUser.id}
+          onClose={() => setEditingDept(null)}
+          onSaved={handleDeptSaved}
+        />
+      )}
+
+      {editingCat && (
+        <EditCatModal
+          cat={editingCat}
+          userId={currentUser.id}
+          onClose={() => setEditingCat(null)}
+          onSaved={handleCatSaved}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Edit department modal ─────────────────────────────────────────────────────
+
+function EditDeptModal({
+  dept, userId, onClose, onSaved,
+}: { dept: ServerDepartment; userId: string; onClose: () => void; onSaved: (d: ServerDepartment) => void }) {
+  const [name, setName] = useState(dept.name);
+  const [description, setDescription] = useState(dept.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError("El nombre es requerido"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateDepartment(userId, dept.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+      });
+      onSaved(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <EditModal
+      title={`Editar departamento`}
+      subtitle={dept.id}
+      onClose={onClose}
+      onSave={handleSave}
+      saving={saving}
+      error={error}
+    >
+      <Field label="Nombre">
+        <input
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(null); }}
+          className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100"
+        />
+      </Field>
+      <Field label="Descripción" hint="Opcional">
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 resize-none"
+        />
+      </Field>
+    </EditModal>
+  );
+}
+
+// ─── Edit category modal ───────────────────────────────────────────────────────
+
+function EditCatModal({
+  cat, userId, onClose, onSaved,
+}: { cat: ServerCategory; userId: string; onClose: () => void; onSaved: (c: ServerCategory) => void }) {
+  const [name, setName] = useState(cat.name);
+  const [description, setDescription] = useState(cat.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError("El nombre es requerido"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateCategory(userId, cat.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+      });
+      onSaved(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <EditModal
+      title="Editar categoría"
+      subtitle={cat.id}
+      onClose={onClose}
+      onSave={handleSave}
+      saving={saving}
+      error={error}
+    >
+      <Field label="Nombre (label)">
+        <input
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(null); }}
+          className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100"
+        />
+      </Field>
+      <Field label="Descripción" hint="Descripción visible al crear un ticket">
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          className="w-full bg-gray-50 border border-gray-200 rounded-md px-3.5 py-2.5 text-sm outline-none focus:border-[#0047AC] focus:ring-2 focus:ring-blue-100 resize-none"
+        />
+      </Field>
+    </EditModal>
+  );
+}
+
+// ─── Shared edit modal shell ───────────────────────────────────────────────────
+
+function EditModal({
+  title, subtitle, onClose, onSave, saving, error, children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  onSave: () => void;
+  saving: boolean;
+  error: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-sm max-w-md w-full">
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">{title}</h3>
+            {subtitle && <code className="text-[10px] text-gray-400 font-mono">{subtitle}</code>}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 mt-0.5">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 flex flex-col gap-4">
+          {children}
+          {error && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <AlertCircle size={12} />{error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-md text-sm font-semibold hover:bg-gray-50">
             Cancelar
           </button>
           <button
-            onClick={onConfirm}
-            className="flex-1 bg-red-500 text-white py-2.5 rounded-md text-sm font-semibold hover:bg-red-600"
+            onClick={onSave}
+            disabled={saving}
+            className="flex-1 bg-[#0047AC] text-white py-2.5 rounded-md text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            Eliminar
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            Guardar
           </button>
         </div>
       </div>
@@ -538,11 +1562,9 @@ function DeleteModal({
   );
 }
 
-// ─── Field & table primitives ─────────────────────────────────────────────────
+// ─── Shared primitives ────────────────────────────────────────────────────────
 
-function Field({
-  label, hint, error, children,
-}: { label: string; hint?: string; error?: string; children: React.ReactNode }) {
+function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</label>
@@ -554,11 +1576,81 @@ function Field({
 }
 
 const Th = ({ children }: { children?: React.ReactNode }) => (
-  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-    {children}
-  </th>
+  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">{children}</th>
 );
 
 const Td = ({ children }: { children?: React.ReactNode }) => (
   <td className="px-4 py-3">{children}</td>
 );
+
+interface FilterOption { value: string; label: string; }
+
+function FilterSelect({ value, onChange, label, options, className }: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  options: FilterOption[];
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+  const isDefault = value === options[0]?.value;
+
+  return (
+    <div ref={ref} className={`relative ${className ?? ""}`}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        className={`w-full flex items-center justify-between gap-2 rounded-lg border bg-white py-[9px] px-3 text-sm cursor-pointer transition-colors ${
+          open
+            ? "border-[#0047AC] ring-2 ring-[#0047AC]/10"
+            : "border-gray-300 hover:border-gray-400"
+        }`}
+      >
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap shrink-0">{label}:</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={`truncate ${isDefault ? "text-gray-500" : "text-gray-800 font-medium"}`}>{selected?.label}</span>
+          <ChevronDown
+            size={13}
+            className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          />
+        </div>
+      </div>
+
+      {open && (
+        <ul className="absolute top-full z-50 mt-1 min-w-full w-max max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {options.map((opt) => {
+            const active = opt.value === value;
+            return (
+              <li
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm whitespace-nowrap transition-colors ${
+                  active
+                    ? "bg-blue-50 text-[#0047AC] font-medium"
+                    : "text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                  active ? "border-[#0047AC] bg-[#0047AC]" : "border-gray-300 bg-white"
+                }`}>
+                  {active && <Check size={9} className="text-white" strokeWidth={2.5} />}
+                </div>
+                {opt.label}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

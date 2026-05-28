@@ -17,6 +17,7 @@ function AppRoutes() {
   const currentUser = useAppSelector((s) => s.auth.currentUser);
   const isRestricted = currentUser?.role === "requester" || currentUser?.role === "participant";
   const isMaster     = currentUser?.role === "master";
+  const canConfig    = isMaster || (currentUser?.permissions ?? []).includes("admin.roles");
 
   const router = createBrowserRouter([
     {
@@ -33,7 +34,7 @@ function AppRoutes() {
         { path: "/create-ticket",     element: <NewTicketFormPage /> },
         { path: "/ticket-detail/:id", element: <TicketDetail /> },
         { path: "/ticket-detail",     element: <TicketDetail /> },
-        { path: "/config",            element: isMaster ? <ConfigPage /> : <Navigate to="/" replace /> },
+        { path: "/config",            element: canConfig ? <ConfigPage /> : <Navigate to="/" replace /> },
       ],
     },
     { path: "*", element: <Navigate to={currentUser ? "/" : "/login"} replace /> },
@@ -77,10 +78,10 @@ function AppBootstrap() {
   const usersError   = useAppSelector((s) => s.users.error);
 
   useEffect(() => {
-    if (currentUser && usersStatus === "idle") {
+    if (currentUser?.id) {
       dispatch(fetchUsers());
     }
-  }, [dispatch, currentUser, usersStatus]);
+  }, [dispatch, currentUser?.id]);
 
   useEffect(() => {
     if (currentUser) dispatch(fetchTickets());

@@ -1,5 +1,6 @@
 import { CirclePlus, LayoutDashboard, Ticket, Settings } from "lucide-react";
 import Tap from "../Atoms/Tap";
+import ThemeToggle from "../Atoms/ThemeToggle";
 import { useNavigate, useLocation } from "react-router-dom";
 import logo from "../../assets/leterago-logo.png";
 import { useCurrentUser } from "../../store/hooks";
@@ -38,6 +39,9 @@ const SideBar = () => {
           />
         ))}
       </nav>
+      <div className="mt-auto pt-3 border-t border-gray-100">
+        <ThemeToggle />
+      </div>
     </div>
   );
 };
